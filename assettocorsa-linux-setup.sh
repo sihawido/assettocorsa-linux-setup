@@ -4,7 +4,7 @@ if [ $OS != "fedora" ] && [ $OS != "ubuntu" ] && [ $OS != "debian" ]; then
   echo $OS is not currently supported.
   exit 1
 fi
-# Checking if required software is installed
+# Checking if required packages are installed
 if [ $OS == "fedora" ]; then
   installed="$(dnf list --installed | grep protontricks)"
   if [[ $installed != *"protontricks"* ]]; then
@@ -19,11 +19,18 @@ if [ $OS == "debian" ] || [ $OS == "ubuntu" ]; then
     exit 1
   fi
 fi
+flatpak_remotes="$(flatpak remotes)"
+if [[ $flatpak_remotes != *"flathub"* ]]; then
+  echo Flatpak is either not installed or the Flathub remote is not configured.
+  echo Refer to ${bold}https://flathub.org/setup${normal} to set-up Flatpak.
+  exit 1
+fi
 flatpak_apps=($(flatpak list --columns=application))
 if [[ ${flatpak_apps[@]} != *"com.github.Matoking.protontricks"* ]]; then
   echo "Flatpak version of protontricks is missing, run ${bold}flatpak install com.github.Matoking.protontricks${normal} to install."
   exit 1
-fi; if [[ ${flatpak_apps[@]} != *"net.davidotek.pupgui2"* ]]; then
+fi
+if [[ ${flatpak_apps[@]} != *"net.davidotek.pupgui2"* ]]; then
   echo "ProtonUp-Qt is missing, consider installing it to update the Proton-GE version from time to time.
 Hint: ${bold}flatpak install net.davidotek.pupgui2${normal} to install."
 fi
@@ -51,7 +58,7 @@ function ProtonGE () {
   tar -xzf "temp/GE-Proton$GE_version.tar.gz" --directory "temp/"
   cp -r "temp/GE-Proton$GE_version" "$HOME/.steam/root/compatibilitytools.d"
   rm -rf "temp/"
-  echo; echo "Restart Steam for Proton-GE to appear as an option. Go to Assetto Corsa -> Properties -> Compatability. Turn on \"Force the use of a specific Steam Play compatability tool\". From the drop-down, select GE-Proton$GE_version."
+  echo; echo "${bold}Restart Steam. Go to Assetto Corsa > Properties > Compatability. Turn on \"Force the use of a specific Steam Play compatability tool\". From the drop-down, select GE-Proton$GE_version.${normal}"
 }
 
 function ContentManager () {
@@ -60,8 +67,8 @@ function ContentManager () {
 	unzip "latest.zip" -d "temp"
 	mv "temp/Content Manager.exe" "temp/AssettoCorsa.exe"
 	mv "$HOME/.local/share/Steam/steamapps/common/assettocorsa/AssettoCorsa.exe" "$HOME/.local/share/Steam/steamapps/common/assettocorsa/AssettoCorsa_original.exe"
-	mv "temp/AssettoCorsa.exe" "$HOME/.local/share/Steam/steamapps/common/assettocorsa/"
-	mv "temp/Manifest.json" "$HOME/.local/share/Steam/steamapps/common/assettocorsa/"
+	cp "temp/AssettoCorsa.exe" "$HOME/.local/share/Steam/steamapps/common/assettocorsa/"
+	cp "temp/Manifest.json" "$HOME/.local/share/Steam/steamapps/common/assettocorsa/"
 	rm -r "latest.zip" "temp"
 }
 
@@ -74,20 +81,13 @@ Press ‘OK’ to close the window.${normal}"; echo
 }
 
 function InstallFonts () {
-  # Using flatpak version here since the native version has bugs preventing this from working
-  flatpak run com.github.Matoking.protontricks 244210 corefonts
   wget https://files.acstuff.ru/shared/T0Zj/fonts.zip
   unzip -u "fonts.zip" -d "temp"
   cp -r "temp/system" "$HOME/.local/share/Steam/steamapps/common/assettocorsa/content/fonts/"
   rm -r "fonts.zip" "temp"
+  # Using flatpak version here since the native version has bugs preventing this from working
+  flatpak run com.github.Matoking.protontricks 244210 corefonts
 }
-
-flatpak_remotes="$(flatpak remotes)"
-if [[ $flatpak_remotes != *"flathub"* ]]; then
-  echo Flatpak is either not installed or the Flathub remote is not configured.
-  echo Refer to ${bold}https://flathub.org/setup${normal} to set-up Flatpak.
-  exit 1
-fi
 
 GE_version="9-20"
 
