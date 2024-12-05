@@ -10,7 +10,7 @@ The bash script installs Proton-GE, Content Manager, asks you to apply some twea
 3. Open the terminal and run `bash assettocorsa-linux-setup.sh` in the same directory as the downloaded file (`cd` to change current directory)
 4. Follow every step in the console (y - stands for yes, n - stands for no)
 5. Launch Assetto Corsa from Steam (it might take a while on the first run, be patient)
-6. In content manager set "Assetto Corsa folder" to Z:\home\YOUR-USERNAME\.local\share\Steam\steamapps\common\assettocorsa
+6. In content manager set "Assetto Corsa folder" to Z:\home\YOUR-USERNAME\\.local\share\Steam\steamapps\common\assettocorsa
 7. Enjoy!
 
 ### Warning
