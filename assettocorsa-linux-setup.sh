@@ -51,6 +51,10 @@ function Ask {
   done
 }
 
+function Symlink () {
+ln -s $HOME/.steam/root/config/loginusers.vdf '$HOME/.local/share/Steam/steamapps/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf'
+}
+
 function ProtonGE () {
   echo "Installing Proton-GE..."
   mkdir "temp"
@@ -70,6 +74,10 @@ function ContentManager () {
 	cp "temp/AssettoCorsa.exe" "$HOME/.local/share/Steam/steamapps/common/assettocorsa/"
 	cp "temp/Manifest.json" "$HOME/.local/share/Steam/steamapps/common/assettocorsa/"
 	rm -r "latest.zip" "temp"
+}
+
+function AMDGPU () {
+  protontricks --no-background-wineserver 244210 dxvk
 }
 
 function CustomShaderPatch () {
@@ -93,6 +101,8 @@ GE_version="9-20"
 
 # Running function
 Ask "Install Proton-GE?" && ProtonGE
+Ask "Create symlink required for Content Manager?" && Symlink
+Ask "Set-up DXVK (might result in better performance for AMD GPUs)?" && AMDGPU
 Ask "Install Content Manager?" && ContentManager
 Ask "Apply CSP tweaks?" && CustomShaderPatch
 Ask "Install required fonts?" && InstallFonts
