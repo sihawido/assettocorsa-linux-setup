@@ -7,13 +7,21 @@ fi
 # Checking if required packages are installed
 if [ $OS == "fedora" ]; then
   installed="$(dnf list --installed | grep protontricks)"
+  if [[ $installed != *"steam"* ]]; then
+    echo "Steam is not installed, run ${bold}sudo dnf install steam${normal} to install."
+    exit 1
+  fi
   if [[ $installed != *"protontricks"* ]]; then
-    echo "Protontricks is missing, run ${bold}sudo dnf install protontricks${normal} to install."
+    echo "Protontricks is not installed, run ${bold}sudo dnf install protontricks${normal} to install."
     exit 1
   fi
 fi
 if [ $OS == "debian" ] || [ $OS == "ubuntu" ]; then
   installed="$(apt list --installed | grep protontricks)"
+  if [[ $installed != *"steam"* ]]; then
+    echo "Steam is not installed, run ${bold}sudo apt install steam${normal} to install."
+    exit 1
+  fi
   if [[ $installed != *"protontricks"* ]]; then
     echo "Protontricks is missing, run ${bold}sudo apt install protontricks${normal} to install."
     exit 1
@@ -21,20 +29,25 @@ if [ $OS == "debian" ] || [ $OS == "ubuntu" ]; then
 fi
 flatpak_remotes="$(flatpak remotes)"
 if [[ $flatpak_remotes != *"flathub"* ]]; then
-  echo Flatpak is either not installed or the Flathub remote is not configured.
-  echo Refer to ${bold}https://flathub.org/setup${normal} to set-up Flatpak.
+  echo "Flatpak is either not installed or the Flathub remote is not configured.
+Refer to ${bold}https://flathub.org/setup${normal} to set-up Flatpak."
   exit 1
 fi
 flatpak_apps=($(flatpak list --columns=application))
+if [[ ${flatpak_apps[@]} == *"com.valvesoftware.Steam"* ]]; then
+  echo "You have a Flatpak version of Steam installed, which is not currently supported."
+  exit 1
+fi
 if [[ ${flatpak_apps[@]} != *"com.github.Matoking.protontricks"* ]]; then
   echo "Flatpak version of protontricks is missing, run ${bold}flatpak install com.github.Matoking.protontricks${normal} to install."
   exit 1
 fi
-if [[ ${flatpak_apps[@]} != *"net.davidotek.pupgui2"* ]]; then
-  echo "ProtonUp-Qt is missing, consider installing it to update the Proton-GE version from time to time.
-Hint: ${bold}flatpak install net.davidotek.pupgui2${normal} to install."
-fi
 echo Pre-requisites are installed.
+
+Steamapps="$HOME/.local/share/Steam/steamapps"
+if ! [[ -d $Steamapps/common/assettocorsa ]]; then
+  echo "Error: Assetto Corsa is either not installed or not in the default path."
+fi
 
 # Defining text styles
 bold=$(tput bold)
@@ -51,10 +64,6 @@ function Ask {
   done
 }
 
-function Symlink () {
-ln -s $HOME/.steam/root/config/loginusers.vdf '$HOME/.local/share/Steam/steamapps/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf'
-}
-
 function ProtonGE () {
   echo "Installing Proton-GE..."
   mkdir "temp"
@@ -63,6 +72,10 @@ function ProtonGE () {
   cp -r "temp/GE-Proton$GE_version" "$HOME/.steam/root/compatibilitytools.d"
   rm -rf "temp/"
   echo; echo "${bold}Restart Steam. Go to Assetto Corsa > Properties > Compatability. Turn on \"Force the use of a specific Steam Play compatability tool\". From the drop-down, select GE-Proton$GE_version.${normal}"
+}
+
+function Symlink () {
+ln -s $HOME/.steam/root/config/loginusers.vdf "$Steamapps/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
 }
 
 function ContentManager () {
@@ -102,7 +115,7 @@ GE_version="9-20"
 # Running function
 Ask "Install Proton-GE?" && ProtonGE
 Ask "Create symlink required for Content Manager?" && Symlink
-Ask "Set-up DXVK (might result in better performance for AMD GPUs)?" && AMDGPU
 Ask "Install Content Manager?" && ContentManager
+Ask "Set-up DXVK (might result in better performance for AMD GPUs)?" && AMDGPU
 Ask "Apply CSP tweaks?" && CustomShaderPatch
 Ask "Install required fonts?" && InstallFonts
