@@ -1,10 +1,3 @@
-# Checking compatability
-OS="$(cat /etc/os-release | grep ID=* -w | sed "s/ID=//g")"
-if [ $OS != "fedora" ] && [ $OS != "ubuntu" ] && [ $OS != "debian" ]; then
-  echo $OS is not currently supported.
-  exit 1
-fi
-
 # Useful variables
 GE_version="9-20"
 Steamapps="$HOME/.local/share/Steam/steamapps"
@@ -13,6 +6,12 @@ Steamapps="$HOME/.local/share/Steam/steamapps"
 bold=$(tput bold)
 normal=$(tput sgr0)
 
+# Checking compatability
+OS="$(cat /etc/os-release | grep ID=* -w | sed "s/ID=//g")"
+if [ $OS == "fedora" ]; then PM="dnf"
+elif [ $OS == "debian" ] || [ $OS == "ubuntu" ]; then PM="apt"
+else echo "$OS is not currently supported."; exit 1; fi
+
 # Checking if Flatpak is set up
 flatpak_remotes="$(flatpak remotes)"
 if [[ $flatpak_remotes != *"flathub"* ]]; then
@@ -20,42 +19,29 @@ if [[ $flatpak_remotes != *"flathub"* ]]; then
 Refer to ${bold}https://flathub.org/setup${normal} to set-up Flatpak."
   exit 1
 fi
+
+installed_packages=($($PM list --installed))
+installed_flatpaks=($(flatpak list --columns=application))
+req_packages=("steam" "protontricks")
+req_flatpaks=("protontricks")
+
 # Checking if Steam is installed through Flatpak
-flatpak_apps=($(flatpak list --columns=application))
-if [[ ${flatpak_apps[@]} == *"com.valvesoftware.Steam"* ]]; then
+if [[ ${installed_flatpaks[@]} == *"com.valvesoftware.Steam"* ]]; then
   echo "You have a Flatpak version of Steam installed, which is not currently supported."
   exit 1
 fi
-
-# Checking if required packages are installed for Fedora
-if [ $OS == "fedora" ]; then
-  installed="$(dnf list --installed)"
-  if [[ $installed != *"steam"* ]]; then
-    echo "Steam is not installed, run ${bold}sudo dnf install steam${normal} to install."
+for package in ${req_packages[@]}; do
+  if [[ ${installed_packages[@]} != *$package* ]]; then
+    echo "$package is not installed, run ${bold}sudo $PM install $package${normal} to install."
     exit 1
   fi
-  if [[ $installed != *"protontricks"* ]]; then
-    echo "Protontricks is not installed, run ${bold}sudo dnf install protontricks${normal} to install."
+done
+for package in ${req_flatpaks[@]}; do
+  if [[ ${installed_flatpaks[@]} != *$package* ]]; then
+    echo "$package is not installed, run ${bold}flatpak install $package${normal} to install."
     exit 1
   fi
-fi
-
-# Checking if required packages are installed for Debian and Ubuntu
-if [ $OS == "debian" ] || [ $OS == "ubuntu" ]; then
-  installed="$(apt list --installed)"
-  if [[ $installed != *"steam"* ]]; then
-    echo "Steam is not installed, run ${bold}sudo apt install steam${normal} to install."
-    exit 1
-  fi
-  if [[ $installed != *"protontricks"* ]]; then
-    echo "Protontricks is missing, run ${bold}sudo apt install protontricks${normal} to install."
-    exit 1
-  fi
-fi
-if [[ ${flatpak_apps[@]} != *"com.github.Matoking.protontricks"* ]]; then
-  echo "Flatpak version of protontricks is missing, run ${bold}flatpak install com.github.Matoking.protontricks${normal} to install."
-  exit 1
-fi
+done
 echo "Pre-requisites are installed."
 
 # Checking if Assetto Corsa is installed
@@ -63,7 +49,7 @@ if ! [[ -d $Steamapps/common/assettocorsa ]]; then
   echo "Error: Assetto Corsa is either not installed or not in the default path."
   exit 1
 fi
-echo "Assetto Corsa is installation found."
+echo "Assetto Corsa installation found."
 
 # Defining functions
 function ProtonGE () {
@@ -84,14 +70,14 @@ function Symlink () {
 }
 
 function ContentManager () {
-	echo "Installing Content Manager..."
-	wget -q "https://acstuff.ru/app/latest.zip"
-	unzip -q "latest.zip" -d "temp"
-	mv "temp/Content Manager.exe" "temp/AssettoCorsa.exe"
-	mv "$Steamapps/common/assettocorsa/AssettoCorsa.exe" "$HOME/.local/share/Steam/steamapps/common/assettocorsa/AssettoCorsa_original.exe"
-	cp "temp/AssettoCorsa.exe" "$Steamapps/common/assettocorsa/"
-	cp "temp/Manifest.json" "$Steamapps/common/assettocorsa/"
-	rm -r "latest.zip" "temp"
+  echo "Installing Content Manager..."
+  wget -q "https://acstuff.ru/app/latest.zip"
+  unzip "latest.zip" -d "temp" -q
+  mv "temp/Content Manager.exe" "temp/AssettoCorsa.exe"
+  mv "$Steamapps/common/assettocorsa/AssettoCorsa.exe" "$HOME/.local/share/Steam/steamapps/common/assettocorsa/AssettoCorsa_original.exe"
+  cp "temp/AssettoCorsa.exe" "$Steamapps/common/assettocorsa/"
+  cp "temp/Manifest.json" "$Steamapps/common/assettocorsa/"
+  rm -r "latest.zip" "temp"
 }
 
 function dxvk () {
@@ -109,7 +95,7 @@ Press ‘OK’ to close the window.${normal}"; echo
 function InstallFonts () {
   echo "Installing required fonts..."
   wget -q https://files.acstuff.ru/shared/T0Zj/fonts.zip
-  unzip -q "fonts.zip" -d "temp"
+  unzip "fonts.zip" -d "temp" -q
   cp -r "temp/system" "$Steamapps/common/assettocorsa/content/fonts/"
   rm -r "fonts.zip" "temp"
   # Using flatpak version here since the native version has bugs preventing this from working
