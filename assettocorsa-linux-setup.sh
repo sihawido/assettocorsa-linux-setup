@@ -1,11 +1,12 @@
 # Checking compatability
 OS="$(cat /etc/os-release | grep ID=* -w | sed "s/ID=//g")"
 if [ $OS == "fedora" ] || [ $OS == "ultramarine" ]; then PM="dnf"
-elif [ $OS == "debian" ] || [ $OS == "ubuntu" ]; then PM="apt"
+elif [ $OS == "debian" ] || [ $OS == "ubuntu" ] || [ $OS == "linuxmint" ]; then PM="apt"
 else echo "$OS is not currently supported."; exit 1; fi
 
 # Useful variables
 GE_version="9-20"
+CSP_version="0.2.4"
 
 # Defining text styles for readablity
 bold=$(tput bold)
@@ -21,7 +22,7 @@ fi
 
 installed_packages=($($PM list --installed))
 installed_flatpaks=($(flatpak list --columns=application))
-req_packages=("steam" "protontricks")
+req_packages=("steam" "protontricks" "wget2" "unzip")
 req_flatpaks=("protontricks")
 
 # Checking if Steam is installed through Flatpak
@@ -76,11 +77,11 @@ echo "Pre-requisites are installed."
 # Defining functions
 function ProtonGE () {
   echo "Installing Proton-GE..."
-  mkdir "temp"
-  wget -q -P "temp/" "https://github.com/GloriousEggroll/proton-ge-custom/releases/latest/download/GE-Proton$GE_version.tar.gz"
-  tar -xzf "temp/GE-Proton$GE_version.tar.gz" --directory "temp/"
+  mkdir "temp" -p
+  wget -q "https://github.com/GloriousEggroll/proton-ge-custom/releases/latest/download/GE-Proton$GE_version.tar.gz" -P "temp/"
+  tar -xzf "temp/GE-Proton$GE_version.tar.gz" -C "temp/"
   echo; echo "Copying Proton-GE requires root privileges."
-  sudo cp -r "temp/GE-Proton$GE_version" "$HOME/.steam/root/compatibilitytools.d"
+  sudo cp -ra "temp/GE-Proton$GE_version" "$HOME/.steam/root/compatibilitytools.d"
   rm -rf "temp/"
   echo "Proton-GE is installed."
   echo; echo "${bold}Restart Steam. Go to Assetto Corsa > Properties > Compatability. Turn on \"Force the use of a specific Steam Play compatability tool\". From the drop-down, select GE-Proton$GE_version.${normal}"; echo
@@ -93,17 +94,14 @@ function Symlink () {
 
 function ContentManager () {
   echo "Installing Content Manager..."
-  wget -q "https://acstuff.ru/app/latest.zip"
-  unzip -q "latest.zip" -d "temp"
+  mkdir "temp" -p
+  wget -q "https://acstuff.ru/app/latest.zip" -P "temp/"
+  unzip -q "temp/latest.zip" -d "temp/"
   mv "temp/Content Manager.exe" "temp/AssettoCorsa.exe"
   mv "$Steamapps/common/assettocorsa/AssettoCorsa.exe" "$Steamapps/common/assettocorsa/AssettoCorsa_original.exe"
   cp "temp/AssettoCorsa.exe" "$Steamapps/common/assettocorsa/"
   cp "temp/Manifest.json" "$Steamapps/common/assettocorsa/"
-  rm -r "latest.zip" "temp"
-}
-
-function dxvk () {
-  protontricks --no-background-wineserver 244210 dxvk
+  rm -r "temp"
 }
 
 function CustomShaderPatch () {
@@ -111,22 +109,36 @@ function CustomShaderPatch () {
 Look for dwrite in the list and make sure it also says ‘native, built-in’. If it doesn’t, switch it via the ‘Edit’ menu.
 Press ‘OK’ to close the window.${normal}"; echo
   # Using non-flatpak version here since the flatpak version doesn't seem to work
-  protontricks -c winecfg 244210
+  protontricks --command winecfg 244210; echo
+  echo "Installing CSP..."
+  mkdir "temp" -p
+  wget -q "https://acstuff.club/patch/?get=$CSP_version" -P "temp/"
+  cd "temp/"
+  # For some reason the downloaded file name is weird so we have to rename it
+  mv "index.html?get=$CSP_version" "lights-patch-v$CSP_version.zip" -f
+  cd ..
+  unzip -qo "temp/lights-patch-v$CSP_version.zip" -d "temp/"
+  cp -r "temp/." "$Steamapps/common/assettocorsa"
+  rm -r "temp"
+}
+
+function dxvk () {
+  protontricks --no-background-wineserver 244210 dxvk; echo
 }
 
 function InstallFonts () {
   echo "Installing required fonts..."
-  wget -q https://files.acstuff.ru/shared/T0Zj/fonts.zip
-  unzip -q "fonts.zip" -d "temp"
+  mkdir "temp" -p
+  wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/"
+  unzip -qo "temp/fonts.zip" -d "temp/"
   cp -r "temp/system" "$Steamapps/common/assettocorsa/content/fonts/"
-  rm -r "fonts.zip" "temp"
+  rm -r "temp/"
   # Flatpak apps, by default, only have access to stuff inside the home directory
   if [[ $Steamapps != "$HOME"* ]]; then
     echo "Flatpak version of protontricks might not have access to this location."
     echo "Running \"${bold}sudo flatpak override com.github.Matoking.protontricks --filesystem=${Steamapps%"/steamapps"}${normal}\""
     sudo flatpak override com.github.Matoking.protontricks --filesystem="${Steamapps%"/steamapps"}"
     flatpak run com.github.Matoking.protontricks 244210 corefonts
-    sudo flatpak override com.github.Matoking.protontricks --nofilesystem="${Steamapps%"/steamapps"}"
   else
     # Using flatpak version here since the native version has bugs preventing this from working
     flatpak run com.github.Matoking.protontricks 244210 corefonts
@@ -152,6 +164,6 @@ fi
 Ask "Install Proton-GE?" && ProtonGE
 Ask "Create symlink required for Content Manager?" && Symlink
 Ask "Install Content Manager?" && ContentManager
+Ask "Install CSP?" && CustomShaderPatch
 Ask "Set-up DXVK (might result in better performance for AMD GPUs)?" && dxvk
-Ask "Apply CSP tweaks?" && CustomShaderPatch
 Ask "Install required fonts?" && InstallFonts
