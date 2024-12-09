@@ -1,16 +1,15 @@
+# Checking compatability
+OS="$(cat /etc/os-release | grep ID=* -w | sed "s/ID=//g")"
+if [ $OS == "fedora" ] || [ $OS == "ultramarine" ]; then PM="dnf"
+elif [ $OS == "debian" ] || [ $OS == "ubuntu" ]; then PM="apt"
+else echo "$OS is not currently supported."; exit 1; fi
+
 # Useful variables
 GE_version="9-20"
-Steamapps="$HOME/.local/share/Steam/steamapps"
 
 # Defining text styles for readablity
 bold=$(tput bold)
 normal=$(tput sgr0)
-
-# Checking compatability
-OS="$(cat /etc/os-release | grep ID=* -w | sed "s/ID=//g")"
-if [ $OS == "fedora" ]; then PM="dnf"
-elif [ $OS == "debian" ] || [ $OS == "ubuntu" ]; then PM="apt"
-else echo "$OS is not currently supported."; exit 1; fi
 
 # Checking if Flatpak is set up
 flatpak_remotes="$(flatpak remotes)"
@@ -30,6 +29,7 @@ if [[ ${installed_flatpaks[@]} == *"com.valvesoftware.Steam"* ]]; then
   echo "You have a Flatpak version of Steam installed, which is not currently supported."
   exit 1
 fi
+# Checking if required packages are installed
 for package in ${req_packages[@]}; do
   if [[ ${installed_packages[@]} != *$package* ]]; then
     echo "$package is not installed, run ${bold}sudo $PM install $package${normal} to install."
@@ -42,14 +42,36 @@ for package in ${req_flatpaks[@]}; do
     exit 1
   fi
 done
-echo "Pre-requisites are installed."
 
 # Checking if Assetto Corsa is installed
-if ! [[ -d $Steamapps/common/assettocorsa ]]; then
-  echo "Error: Assetto Corsa is either not installed or not in the default path."
-  exit 1
+function Ask {
+  while true; do
+    read -p "$* [y/n]: " yn
+    case $yn in
+      [Yy]*) return 0 ;;  
+      [Nn]*) echo "Aborting..." ; exit 1 ;;
+    esac
+  done
+}
+echo "Looking for Assetto Corsa installation..."
+# Searching the home directory first, and then external disks
+ac_dir="$(find $HOME -type d -name assettocorsa -not -path ".compatdata*")"
+if [[ $ac_dir == "" ]]; then
+  ac_dir="$(find /mnt -type d -name assettocorsa -not -path ".compatdata*")"
+  if [[ $ac_dir == "" ]]; then
+    ac_dir="$(find /run -type d -name assettocorsa -not -path ".compatdata*")"
+    if [[ $ac_dir == "" ]]; then
+      ac_dir="$(find /var/run -type d -name assettocorsa -not -path ".compatdata*")"
+      if [[ $ac_dir == "" ]]; then
+        echo "Assetto Corsa installation not found."
+        exit 1
+      fi
+    fi
+  fi
 fi
-echo "Assetto Corsa installation found."
+Ask "Is ${bold}$ac_dir${normal} the right location?" && Steamapps=${ac_dir%"/common/assettocorsa"}
+
+echo "Pre-requisites are installed."
 
 # Defining functions
 function ProtonGE () {
@@ -72,9 +94,9 @@ function Symlink () {
 function ContentManager () {
   echo "Installing Content Manager..."
   wget -q "https://acstuff.ru/app/latest.zip"
-  unzip "latest.zip" -d "temp" -q
+  unzip -q "latest.zip" -d "temp"
   mv "temp/Content Manager.exe" "temp/AssettoCorsa.exe"
-  mv "$Steamapps/common/assettocorsa/AssettoCorsa.exe" "$HOME/.local/share/Steam/steamapps/common/assettocorsa/AssettoCorsa_original.exe"
+  mv "$Steamapps/common/assettocorsa/AssettoCorsa.exe" "$Steamapps/common/assettocorsa/AssettoCorsa_original.exe"
   cp "temp/AssettoCorsa.exe" "$Steamapps/common/assettocorsa/"
   cp "temp/Manifest.json" "$Steamapps/common/assettocorsa/"
   rm -r "latest.zip" "temp"
@@ -85,7 +107,7 @@ function dxvk () {
 }
 
 function CustomShaderPatch () {
-  echo; echo "${bold}In the opened window, go to the ‘Libraries’ tab, type dwrite into the ‘New override for library’ textbox and click ‘Add’.
+  echo "${bold}In the opened window, go to the ‘Libraries’ tab, type 'dwrite' into the ‘New override for library’ textbox and click ‘Add’.
 Look for dwrite in the list and make sure it also says ‘native, built-in’. If it doesn’t, switch it via the ‘Edit’ menu.
 Press ‘OK’ to close the window.${normal}"; echo
   # Using non-flatpak version here since the flatpak version doesn't seem to work
@@ -95,22 +117,36 @@ Press ‘OK’ to close the window.${normal}"; echo
 function InstallFonts () {
   echo "Installing required fonts..."
   wget -q https://files.acstuff.ru/shared/T0Zj/fonts.zip
-  unzip "fonts.zip" -d "temp" -q
+  unzip -q "fonts.zip" -d "temp"
   cp -r "temp/system" "$Steamapps/common/assettocorsa/content/fonts/"
   rm -r "fonts.zip" "temp"
-  # Using flatpak version here since the native version has bugs preventing this from working
-  flatpak run com.github.Matoking.protontricks 244210 corefonts
+  # Flatpak apps, by default, only have access to stuff inside the home directory
+  if [[ $Steamapps != "$HOME"* ]]; then
+    echo "Flatpak version of protontricks might not have access to this location."
+    echo "Running \"${bold}sudo flatpak override com.github.Matoking.protontricks --filesystem=${Steamapps%"/steamapps"}${normal}\""
+    sudo flatpak override com.github.Matoking.protontricks --filesystem="${Steamapps%"/steamapps"}"
+    flatpak run com.github.Matoking.protontricks 244210 corefonts
+    sudo flatpak override com.github.Matoking.protontricks --nofilesystem="${Steamapps%"/steamapps"}"
+  else
+    # Using flatpak version here since the native version has bugs preventing this from working
+    flatpak run com.github.Matoking.protontricks 244210 corefonts
+  fi
 }
 
 function Ask {
   while true; do
     read -p "$* [y/n]: " yn
     case $yn in
-      [Yy]*) return 0  ;;  
-      [Nn]*) echo "Skipping" ; return  1 ;;
+      [Yy]*) return 0 ;;  
+      [Nn]*) echo "Skipping..." ; return 1 ;;
     esac
   done
 }
+
+if [ -f "$Steamapps/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk" ]; then
+  echo "Start Menu Shortcut for Content Manager found. This might be causing crashes on start-up."
+  Ask "Delete the shortcut?" && rm "$Steamapps/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk"
+fi
 
 # Asking to run function
 Ask "Install Proton-GE?" && ProtonGE
