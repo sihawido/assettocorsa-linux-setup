@@ -1,8 +1,9 @@
 # Checking compatability
 OS="$(cat /etc/os-release | grep ID=* -w | sed "s/ID=//g")"
-if [ $OS == "fedora" ] || [ $OS == "ultramarine" ]; then PM="dnf"
-elif [ $OS == "debian" ] || [ $OS == "ubuntu" ] || [ $OS == "linuxmint" ]; then PM="apt"
-else echo "$OS is not currently supported."; exit 1; fi
+if [ $OS == "fedora" ] || [ $OS == "ultramarine" ]; then pm_install="dnf install"
+elif [ $OS == "debian" ] || [ $OS == "ubuntu" ] || [ $OS == "linuxmint" ]; then pm_install="apt install"
+elif [ $OS == "arch" ] || [ $OS == "endeavouros" ]; then pm_install="pacman -S"
+else echo "$OS is not currently supported. Feel free to open an issue to support it."; exit 1; fi
 
 # Useful variables
 GE_version="9-20"
@@ -20,9 +21,10 @@ Refer to ${bold}https://flathub.org/setup${normal} to set-up Flatpak."
   exit 1
 fi
 
-installed_packages=($($PM list --installed))
+installed_packages=($(ls /bin))
+installed_packages+=($(ls /usr/bin))
 installed_flatpaks=($(flatpak list --columns=application))
-req_packages=("steam" "protontricks" "wget2" "unzip")
+req_packages=("steam" "wget2" "unzip")
 req_flatpaks=("protontricks")
 
 # Checking if Steam is installed through Flatpak
@@ -33,7 +35,7 @@ fi
 # Checking if required packages are installed
 for package in ${req_packages[@]}; do
   if [[ ${installed_packages[@]} != *$package* ]]; then
-    echo "$package is not installed, run ${bold}sudo $PM install $package${normal} to install."
+    echo "$package is not installed, run ${bold}sudo $pm_install $package${normal} to install."
     exit 1
   fi
 done
@@ -43,6 +45,7 @@ for package in ${req_flatpaks[@]}; do
     exit 1
   fi
 done
+echo "Dependencies found."
 
 # Checking if Assetto Corsa is installed
 function Ask {
@@ -54,8 +57,8 @@ function Ask {
     esac
   done
 }
+# Searching the home directory first, then external disks
 echo "Looking for Assetto Corsa installation..."
-# Searching the home directory first, and then external disks
 ac_dir="$(find $HOME -type d -name assettocorsa -not -path ".compatdata*")"
 if [[ $ac_dir == "" ]]; then
   ac_dir="$(find /mnt -type d -name assettocorsa -not -path ".compatdata*")"
@@ -70,9 +73,7 @@ if [[ $ac_dir == "" ]]; then
     fi
   fi
 fi
-Ask "Is ${bold}$ac_dir${normal} the right location?" && Steamapps=${ac_dir%"/common/assettocorsa"}
-
-echo "Pre-requisites are installed."
+Ask "Found ${bold}$ac_dir${normal}, is the right location?" && Steamapps=${ac_dir%"/common/assettocorsa"}
 
 # Defining functions
 function ProtonGE () {
@@ -85,6 +86,11 @@ function ProtonGE () {
   rm -rf "temp/"
   echo "Proton-GE is installed."
   echo; echo "${bold}Restart Steam. Go to Assetto Corsa > Properties > Compatability. Turn on \"Force the use of a specific Steam Play compatability tool\". From the drop-down, select GE-Proton$GE_version.${normal}"; echo
+}
+
+function dxvk () {
+  flatpak run com.github.Matoking.protontricks --no-background-wineserver 244210 dxvk
+  echo
 }
 
 function Symlink () {
@@ -108,8 +114,7 @@ function CustomShaderPatch () {
   echo "${bold}In the opened window, go to the ‘Libraries’ tab, type 'dwrite' into the ‘New override for library’ textbox and click ‘Add’.
 Look for dwrite in the list and make sure it also says ‘native, built-in’. If it doesn’t, switch it via the ‘Edit’ menu.
 Press ‘OK’ to close the window.${normal}"; echo
-  # Using non-flatpak version here since the flatpak version doesn't seem to work
-  protontricks --command winecfg 244210; echo
+  flatpak run com.github.Matoking.protontricks --command "wine winecfg" 244210; echo
   echo "Installing CSP..."
   mkdir "temp" -p
   wget -q "https://acstuff.club/patch/?get=$CSP_version" -P "temp/"
@@ -118,31 +123,25 @@ Press ‘OK’ to close the window.${normal}"; echo
   mv "index.html?get=$CSP_version" "lights-patch-v$CSP_version.zip" -f
   cd ..
   unzip -qo "temp/lights-patch-v$CSP_version.zip" -d "temp/"
+  rm "temp/lights-patch-v$CSP_version.zip"
   cp -r "temp/." "$Steamapps/common/assettocorsa"
   rm -r "temp"
 }
 
-function dxvk () {
-  protontricks --no-background-wineserver 244210 dxvk; echo
-}
-
-function InstallFonts () {
+function Fonts () {
   echo "Installing required fonts..."
   mkdir "temp" -p
   wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/"
   unzip -qo "temp/fonts.zip" -d "temp/"
   cp -r "temp/system" "$Steamapps/common/assettocorsa/content/fonts/"
   rm -r "temp/"
-  # Flatpak apps, by default, only have access to stuff inside the home directory
+  # Flatpak protorntricks doesn't have access to /mnt
   if [[ $Steamapps != "$HOME"* ]]; then
     echo "Flatpak version of protontricks might not have access to this location."
     echo "Running \"${bold}sudo flatpak override com.github.Matoking.protontricks --filesystem=${Steamapps%"/steamapps"}${normal}\""
     sudo flatpak override com.github.Matoking.protontricks --filesystem="${Steamapps%"/steamapps"}"
-    flatpak run com.github.Matoking.protontricks 244210 corefonts
-  else
-    # Using flatpak version here since the native version has bugs preventing this from working
-    flatpak run com.github.Matoking.protontricks 244210 corefonts
   fi
+  flatpak run com.github.Matoking.protontricks 244210 corefonts
 }
 
 function Ask {
@@ -162,8 +161,8 @@ fi
 
 # Asking to run function
 Ask "Install Proton-GE?" && ProtonGE
+Ask "Install DXVK? (might result in better performance for AMD GPUs)" && dxvk
 Ask "Create symlink required for Content Manager?" && Symlink
 Ask "Install Content Manager?" && ContentManager
 Ask "Install CSP?" && CustomShaderPatch
-Ask "Set-up DXVK (might result in better performance for AMD GPUs)?" && dxvk
-Ask "Install required fonts?" && InstallFonts
+Ask "Install required fonts?" && Fonts
