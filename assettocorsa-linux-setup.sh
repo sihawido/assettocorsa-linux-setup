@@ -1,9 +1,10 @@
 # Checking compatability
+OS_name="$(cat /etc/os-release | grep NAME=* -w | sed "s/NAME=//g")"
 OS="$(cat /etc/os-release | grep ID=* -w | sed "s/ID=//g")"
 if [ $OS == "fedora" ] || [ $OS == "ultramarine" ]; then pm_install="dnf install"
-elif [ $OS == "debian" ] || [ $OS == "ubuntu" ] || [ $OS == "linuxmint" ]; then pm_install="apt install"
+elif [ $OS == "debian" ] || [ $OS == "ubuntu" ] || [ $OS == "linuxmint" ] || [ $OS == "pop" ]; then pm_install="apt install"
 elif [ $OS == "arch" ] || [ $OS == "endeavouros" ]; then pm_install="pacman -S"
-else echo "$OS is not currently supported. Feel free to open an issue to support it."; exit 1; fi
+else echo "$OS_name is not currently supported. Feel free to open an issue to support it."; exit 1; fi
 
 # Useful variables
 GE_version="9-20"
@@ -28,10 +29,38 @@ req_packages=("steam" "wget2" "unzip")
 req_flatpaks=("protontricks")
 
 # Checking if Steam is installed through Flatpak
-if [[ ${installed_flatpaks[@]} == *"com.valvesoftware.Steam"* ]]; then
-  echo "You have a Flatpak version of Steam installed, which is not currently supported."
-  exit 1
+function set_to_native () {
+  default_ac_path="$HOME/.local/share/Steam/steamapps/common/assettocorsa"
+  STEAM_ROOT="$HOME/.steam/root"
+  steam_command="steam"
+}; function set_to_flatpak () {
+  default_ac_path="$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/assettocorsa"
+  STEAM_ROOT="$HOME/.var/app/com.valvesoftware.Steam/.steam/root"
+  steam_command="flatpak run com.valvesoftware.Steam"
+}
+
+if [[ ${installed_packages[@]} == *"steam"* ]] && [[ ${installed_flatpaks[@]} == *"com.valvesoftware.Steam"* ]]; then
+  echo "Steam is installed both as a native package and through Flatpak."
+  PS3="Select version to use: "
+  select installation_method in "Native" "Flatpak"
+  do
+    installation_method="$(echo ${installation_method,,} | awk '{print $1;}')"
+    if [ $installation_method == "native" ]; then
+      set_to_native
+      break
+    elif [ $installation_method == "flatpak" ]; then
+      set_to_flatpak
+      break
+    fi
+  done
+elif [[ ${installed_packages[@]} == *"steam"* ]]; then
+  echo "Native install of Steam found."
+  set_to_native
+elif [[ ${installed_flatpaks[@]} == *"com.valvesoftware.Steam"* ]]; then
+  echo "Flatpak install of Steam found."
+  set_to_flatpak
 fi
+
 # Checking if required packages are installed
 for package in ${req_packages[@]}; do
   if [[ ${installed_packages[@]} != *$package* ]]; then
@@ -47,42 +76,45 @@ for package in ${req_flatpaks[@]}; do
 done
 echo "Dependencies found."
 
-# Checking if Assetto Corsa is installed
-function Ask {
-  while true; do
-    read -p "$* [y/n]: " yn
-    case $yn in
-      [Yy]*) return 0 ;;  
-      [Nn]*) echo "Aborting..." ; exit 1 ;;
-    esac
-  done
-}
-# Searching the home directory first, then external disks
-echo "Looking for Assetto Corsa installation..."
-ac_dir="$(find $HOME -type d -name assettocorsa -not -path ".compatdata*")"
-if [[ $ac_dir == "" ]]; then
-  ac_dir="$(find /mnt -type d -name assettocorsa -not -path ".compatdata*")"
-  if [[ $ac_dir == "" ]]; then
-    ac_dir="$(find /run -type d -name assettocorsa -not -path ".compatdata*")"
-    if [[ $ac_dir == "" ]]; then
-      ac_dir="$(find /var/run -type d -name assettocorsa -not -path ".compatdata*")"
-      if [[ $ac_dir == "" ]]; then
-        echo "Assetto Corsa installation not found."
-        exit 1
-      fi
-    fi
-  fi
-fi
-Ask "Found ${bold}$ac_dir${normal}, is the right location?" && Steamapps=${ac_dir%"/common/assettocorsa"}
-
 # Defining functions
+function enter_manually () {
+  Ask "Enter path to ${bold}steamapps/common/assettocorsa${normal} manually?" && read ac_dir
+  if [[ $ac_dir == "" ]]; then
+    exit 1
+  elif [ -d $ac_dir ] && [[ $(echo $ac_dir | sed -e 's/.*assettocorsa/assettocorsa/') == "assettocorsa" ]]; then
+    echo "Directory valid. Proceeding."
+  else
+    echo "Invalid directory. Exiting."
+    exit 1
+  fi
+}
+function FindAC () {
+  if [ -d $default_ac_path ]; then
+    echo "Found ${bold}$default_ac_path${normal}."
+    Ask "Is that the right installation?" && STEAMAPPS="${default_ac_path%"/common/assettocorsa"}"
+    if [[ $STEAMAPPS == "" ]]; then
+      enter_manually
+    fi
+  else
+    echo "Could not find Asseto Corsa in the default path."
+    enter_manually
+  fi
+}
+
+function StartMenuShortcut () {
+  if [ -f "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk" ]; then
+    echo "Start Menu Shortcut for Content Manager found. This might be causing crashes on start-up."
+    Ask "Delete the shortcut?" && rm "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk"
+  fi
+}
+
 function ProtonGE () {
   echo "Installing Proton-GE..."
   mkdir "temp" -p
-  wget -q "https://github.com/GloriousEggroll/proton-ge-custom/releases/latest/download/GE-Proton$GE_version.tar.gz" -P "temp/"
+  wget -q "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton$GE_version/GE-Proton$GE_version.tar.gz" -P "temp/"
   tar -xzf "temp/GE-Proton$GE_version.tar.gz" -C "temp/"
   echo; echo "Copying Proton-GE requires root privileges."
-  sudo cp -ra "temp/GE-Proton$GE_version" "$HOME/.steam/root/compatibilitytools.d"
+  sudo cp -ra "temp/GE-Proton$GE_version" "$STEAM_ROOT/compatibilitytools.d"
   rm -rf "temp/"
   echo "Proton-GE is installed."
   echo; echo "${bold}Restart Steam. Go to Assetto Corsa > Properties > Compatability. Turn on \"Force the use of a specific Steam Play compatability tool\". From the drop-down, select GE-Proton$GE_version.${normal}"; echo
@@ -93,20 +125,18 @@ function dxvk () {
   echo
 }
 
-function Symlink () {
-  echo "Creating symlink..."
-  ln -sf "$HOME/.steam/root/config/loginusers.vdf" "$Steamapps/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
-}
-
 function ContentManager () {
+  echo "Creating symlink..."
+  ln -sf "$STEAM_ROOT/compatibilitytools.d/config/loginusers.vdf" "$STEAMAPPS/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
+  
   echo "Installing Content Manager..."
   mkdir "temp" -p
   wget -q "https://acstuff.ru/app/latest.zip" -P "temp/"
   unzip -q "temp/latest.zip" -d "temp/"
   mv "temp/Content Manager.exe" "temp/AssettoCorsa.exe"
-  mv "$Steamapps/common/assettocorsa/AssettoCorsa.exe" "$Steamapps/common/assettocorsa/AssettoCorsa_original.exe"
-  cp "temp/AssettoCorsa.exe" "$Steamapps/common/assettocorsa/"
-  cp "temp/Manifest.json" "$Steamapps/common/assettocorsa/"
+  mv "$STEAMAPPS/common/assettocorsa/AssettoCorsa.exe" "$STEAMAPPS/common/assettocorsa/AssettoCorsa_original.exe"
+  cp "temp/AssettoCorsa.exe" "$STEAMAPPS/common/assettocorsa/"
+  cp "temp/Manifest.json" "$STEAMAPPS/common/assettocorsa/"
   rm -r "temp"
 }
 
@@ -124,7 +154,7 @@ Press ‘OK’ to close the window.${normal}"; echo
   cd ..
   unzip -qo "temp/lights-patch-v$CSP_version.zip" -d "temp/"
   rm "temp/lights-patch-v$CSP_version.zip"
-  cp -r "temp/." "$Steamapps/common/assettocorsa"
+  cp -r "temp/." "$STEAMAPPS/common/assettocorsa"
   rm -r "temp"
 }
 
@@ -133,13 +163,13 @@ function Fonts () {
   mkdir "temp" -p
   wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/"
   unzip -qo "temp/fonts.zip" -d "temp/"
-  cp -r "temp/system" "$Steamapps/common/assettocorsa/content/fonts/"
+  cp -r "temp/system" "$STEAMAPPS/common/assettocorsa/content/fonts/"
   rm -r "temp/"
   # Flatpak protorntricks doesn't have access to /mnt
-  if [[ $Steamapps != "$HOME"* ]]; then
+  if [[ $STEAMAPPS != "$HOME"* ]]; then
     echo "Flatpak version of protontricks might not have access to this location."
-    echo "Running \"${bold}sudo flatpak override com.github.Matoking.protontricks --filesystem=${Steamapps%"/steamapps"}${normal}\""
-    sudo flatpak override com.github.Matoking.protontricks --filesystem="${Steamapps%"/steamapps"}"
+    echo "Running \"${bold}sudo flatpak override com.github.Matoking.protontricks --filesystem=${STEAMAPPS%"/STEAMAPPS"}${normal}\""
+    sudo flatpak override com.github.Matoking.protontricks --filesystem="${STEAMAPPS%"/STEAMAPPS"}"
   fi
   flatpak run com.github.Matoking.protontricks 244210 corefonts
 }
@@ -154,15 +184,16 @@ function Ask {
   done
 }
 
-if [ -f "$Steamapps/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk" ]; then
-  echo "Start Menu Shortcut for Content Manager found. This might be causing crashes on start-up."
-  Ask "Delete the shortcut?" && rm "$Steamapps/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk"
-fi
-
 # Asking to run function
+FindAC
+StartMenuShortcut
 Ask "Install Proton-GE?" && ProtonGE
+if [ ! -d "$STEAMAPPS/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
+  echo "Please launch Assetto Corsa with Proton-GE to generate required files before proceeding.
+(it might take a while to launch)"
+  exit 1
+fi
 Ask "Install DXVK? (might result in better performance for AMD GPUs)" && dxvk
-Ask "Create symlink required for Content Manager?" && Symlink
 Ask "Install Content Manager?" && ContentManager
 Ask "Install CSP?" && CustomShaderPatch
 Ask "Install required fonts?" && Fonts
