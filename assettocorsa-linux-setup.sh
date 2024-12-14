@@ -110,14 +110,15 @@ function StartMenuShortcut () {
 
 function ProtonGE () {
   echo "Installing Proton-GE..."
-  mkdir "temp" -p
-  wget -q "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton$GE_version/GE-Proton$GE_version.tar.gz" -P "temp/"
-  tar -xzf "temp/GE-Proton$GE_version.tar.gz" -C "temp/"
-  echo; echo "Copying Proton-GE requires root privileges."
-  sudo cp -ra "temp/GE-Proton$GE_version" "$STEAM_ROOT/compatibilitytools.d"
-  rm -rf "temp/"
-  echo "Proton-GE is installed."
-  echo; echo "${bold}Restart Steam. Go to Assetto Corsa > Properties > Compatability. Turn on \"Force the use of a specific Steam Play compatability tool\". From the drop-down, select GE-Proton$GE_version.${normal}"; echo
+  echo "Note: Copying Proton-GE might require root privileges."
+  wget -q "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton$GE_version/GE-Proton$GE_version.tar.gz" -P "temp/" &&
+  tar -xzf "temp/GE-Proton$GE_version.tar.gz" -C "temp/" &&
+  sudo cp -ra "temp/GE-Proton$GE_version" "$STEAM_ROOT/compatibilitytools.d" &&
+  rm -rf "temp/" &&
+  echo "Proton-GE is installed." &&
+  echo "${bold}Restart Steam. Go to Assetto Corsa > Properties > Compatability. Turn on \"Force the use of a specific Steam Play compatability tool\". From the drop-down, select GE-Proton$GE_version.${normal}" &&
+  return
+  Error "Proton-GE installation failed"
 }
 
 function dxvk () {
@@ -127,17 +128,17 @@ function dxvk () {
 
 function ContentManager () {
   echo "Creating symlink..."
-  ln -sf "$STEAM_ROOT/compatibilitytools.d/config/loginusers.vdf" "$STEAMAPPS/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
-  
-  echo "Installing Content Manager..."
-  mkdir "temp" -p
-  wget -q "https://acstuff.ru/app/latest.zip" -P "temp/"
-  unzip -q "temp/latest.zip" -d "temp/"
-  mv "temp/Content Manager.exe" "temp/AssettoCorsa.exe"
-  mv "$STEAMAPPS/common/assettocorsa/AssettoCorsa.exe" "$STEAMAPPS/common/assettocorsa/AssettoCorsa_original.exe"
-  cp "temp/AssettoCorsa.exe" "$STEAMAPPS/common/assettocorsa/"
-  cp "temp/Manifest.json" "$STEAMAPPS/common/assettocorsa/"
-  rm -r "temp"
+  ln -sf "$STEAM_ROOT/compatibilitytools.d/config/loginusers.vdf" "$STEAMAPPS/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf" &&
+  echo "Installing Content Manager..." &&
+  wget -q "https://acstuff.ru/app/latest.zip" -P "temp/" &&
+  unzip -q "temp/latest.zip" -d "temp/" &&
+  mv "temp/Content Manager.exe" "temp/AssettoCorsa.exe" &&
+  mv "$STEAMAPPS/common/assettocorsa/AssettoCorsa.exe" "$STEAMAPPS/common/assettocorsa/AssettoCorsa_original.exe" &&
+  cp "temp/AssettoCorsa.exe" "$STEAMAPPS/common/assettocorsa/" &&
+  cp "temp/Manifest.json" "$STEAMAPPS/common/assettocorsa/" &&
+  rm -r "temp" &&
+  return
+  Error "Content Manager installation failed"
 }
 
 function CustomShaderPatch () {
@@ -146,32 +147,41 @@ Look for dwrite in the list and make sure it also says ‘native, built-in’. I
 Press ‘OK’ to close the window.${normal}"; echo
   flatpak run com.github.Matoking.protontricks --command "wine winecfg" 244210; echo
   echo "Installing CSP..."
-  mkdir "temp" -p
-  wget -q "https://acstuff.club/patch/?get=$CSP_version" -P "temp/"
-  cd "temp/"
+  wget -q "https://acstuff.club/patch/?get=$CSP_version" -P "temp/" &&
+  cd "temp/" &&
   # For some reason the downloaded file name is weird so we have to rename it
-  mv "index.html?get=$CSP_version" "lights-patch-v$CSP_version.zip" -f
-  cd ..
-  unzip -qo "temp/lights-patch-v$CSP_version.zip" -d "temp/"
-  rm "temp/lights-patch-v$CSP_version.zip"
-  cp -r "temp/." "$STEAMAPPS/common/assettocorsa"
-  rm -r "temp"
+  mv "index.html?get=$CSP_version" "lights-patch-v$CSP_version.zip" -f &&
+  cd .. &&
+  unzip -qo "temp/lights-patch-v$CSP_version.zip" -d "temp/" &&
+  rm "temp/lights-patch-v$CSP_version.zip" &&
+  cp -r "temp/." "$STEAMAPPS/common/assettocorsa" &&
+  rm -r "temp" &&
+  return
+  Error "CSP installation failed"
 }
 
 function Fonts () {
   echo "Installing required fonts..."
-  mkdir "temp" -p
-  wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/"
-  unzip -qo "temp/fonts.zip" -d "temp/"
-  cp -r "temp/system" "$STEAMAPPS/common/assettocorsa/content/fonts/"
-  rm -r "temp/"
+  wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/" &&
+  unzip -qo "temp/fonts.zip" -d "temp/" &&
+  cp -r "temp/system" "$STEAMAPPS/common/assettocorsa/content/fonts/" &&
+  rm -r "temp/" &&
+  return
+  Error "Fonts installation failed"
+}
+function Fonts2 () {
   # Flatpak protorntricks doesn't have access to /mnt
   if [[ $STEAMAPPS != "$HOME"* ]]; then
-    echo "Flatpak version of protontricks might not have access to this location."
+    echo "Flatpak version of protontricks might not have access to AC directory."
     echo "Running \"${bold}sudo flatpak override com.github.Matoking.protontricks --filesystem=${STEAMAPPS%"/STEAMAPPS"}${normal}\""
     sudo flatpak override com.github.Matoking.protontricks --filesystem="${STEAMAPPS%"/STEAMAPPS"}"
   fi
   flatpak run com.github.Matoking.protontricks 244210 corefonts
+}
+
+function Error () {
+  echo "${bold}ERROR${normal}: $1. Please report on github or elsewhere."
+  exit 1
 }
 
 function Ask {
@@ -196,4 +206,5 @@ fi
 Ask "Install DXVK? (might result in better performance for AMD GPUs)" && dxvk
 Ask "Install Content Manager?" && ContentManager
 Ask "Install CSP?" && CustomShaderPatch
-Ask "Install required fonts?" && Fonts
+Ask "Install fonts for content manager?" && Fonts
+Ask "Install fonts for CSP?" && Fonts2
