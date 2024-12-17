@@ -1,18 +1,18 @@
 # Checking compatability
-OS_name="$(cat /etc/os-release | grep NAME=* -w | sed "s/NAME=//g")"
-OS="$(cat /etc/os-release | grep ID=* -w | sed "s/ID=//g")"
+function os_get () { echo "$(sed "s/.* $1=//g" | sed "s/$1=\"//g" |  sed "s/ .*//g" | sed "s/\"//g")"; }
+os_release="$(cat /etc/os-release)"
+OS="$(echo $os_release | os_get ID)"
+OS_name="$(echo $os_release | os_get NAME)"
 if [ $OS == "fedora" ] || [ $OS == "ultramarine" ]; then pm_install="dnf install"
 elif [ $OS == "debian" ] || [ $OS == "ubuntu" ] || [ $OS == "linuxmint" ] || [ $OS == "pop" ]; then pm_install="apt install"
 elif [ $OS == "arch" ] || [ $OS == "endeavouros" ]; then pm_install="pacman -S"
 else echo "$OS_name is not currently supported. Feel free to open an issue to support it."; exit 1; fi
 
 # Useful variables
-GE_version="9-20"
-CSP_version="0.2.4"
+GE_version="9-20"; CSP_version="0.2.4"
 
 # Defining text styles for readablity
-bold=$(tput bold)
-normal=$(tput sgr0)
+bold=$(tput bold); normal=$(tput sgr0)
 
 # Checking if Flatpak is set up
 flatpak_remotes="$(flatpak remotes)"
@@ -188,7 +188,7 @@ function Ask {
   while true; do
     read -p "$* [y/n]: " yn
     case $yn in
-      [Yy]*) return 0 ;;  
+      [Yy]*) return 0 ;;
       [Nn]*) echo "Skipping..." ; return 1 ;;
     esac
   done
@@ -197,6 +197,7 @@ function Ask {
 # Asking to run function
 FindAC
 StartMenuShortcut
+gio trash "temp/" --force
 Ask "Install Proton-GE?" && ProtonGE
 if [ ! -d "$STEAMAPPS/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
   echo "Please launch Assetto Corsa with Proton-GE to generate required files before proceeding.
