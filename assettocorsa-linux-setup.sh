@@ -9,7 +9,7 @@ elif [ $OS == "arch" ] || [ $OS == "endeavouros" ]; then pm_install="pacman -S"
 else echo "$OS_name is not currently supported. Feel free to open an issue to support it."; exit 1; fi
 
 # Useful variables
-GE_version="9-20"; CSP_version="0.2.4"
+GE_version="9-21"; CSP_version="0.2.5"
 
 # Defining text styles for readablity
 bold=$(tput bold); normal=$(tput sgr0)
