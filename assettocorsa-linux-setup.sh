@@ -27,7 +27,7 @@ installed_packages=($(ls /bin))
 installed_packages+=($(ls /usr/bin))
 installed_packages+=($(ls /usr/games 2> /dev/null))
 installed_flatpaks=($(flatpak list --columns=application))
-req_packages=("steam" "wget" "unzip")
+req_packages=("wget" "unzip")
 req_flatpaks=("protontricks")
 
 # Checking if Steam is installed through Flatpak
@@ -36,7 +36,7 @@ if [[ ${installed_packages[@]} == *"steam"* ]] && [[ ${installed_flatpaks[@]} ==
   PS3="Select which installation of Steam to use: "
   select installation_method in "Native" "Flatpak"
   do
-    installation_method="$(echo ${installation_method,,} | awk '{print $1;}')"
+    installation_method="$(echo ${installation_method,,} | awk '{print $1;}')" # converting to lowercase and using only the first word
     if [ $installation_method == "native" ]; then
       steam_install_method="native"
       break
@@ -51,6 +51,9 @@ elif [[ ${installed_packages[@]} == *"steam"* ]]; then
 elif [[ ${installed_flatpaks[@]} == *"com.valvesoftware.Steam"* ]]; then
   echo "Flatpak installation of Steam found."
   steam_install_method="flatpak"
+else
+  echo "Steam installation not found. Native and Flatpak versions of Steam are supported."
+  exit 1
 fi
 # Setting paths depending on Steam installation
 if [[ $steam_install_method == "native" ]]; then
@@ -78,8 +81,8 @@ echo "Dependencies found."
 
 # Defining functions
 function enter_manually () {
-  echo "Enter path to ${bold}steamapps/common/assettocorsa${normal}:"
   while :; do
+    echo "Enter path to ${bold}steamapps/common/assettocorsa${normal}:"
     read -i "$PWD/" -e ac_dir &&
     ac_dir=${ac_dir%"/"} && # in case path ends with "/" (test -d doesnt work if that is the case)
     eval "ac_dir=$ac_dir" && # In case the path includes ~
@@ -185,7 +188,7 @@ function Fonts2 () {
 }
 
 function Error () {
-  echo "${bold}ERROR${normal}: $1. Please report on github or elsewhere."
+  echo "${bold}ERROR${normal}: $1. Please report at https://github.com/sihawido/assettocorsa-linux-setup/issues."
   exit 1
 }
 
