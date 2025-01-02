@@ -170,8 +170,9 @@ Press ‘OK’ to close the window.${normal}"; echo
 
 function Fonts () {
   echo "Installing required fonts..."
-  wget -q "https://files.acstuff.club/shared/T0Zj/fonts.zip" -P "temp/" &&
+  wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/" &&
   unzip -qo "temp/fonts.zip" -d "temp/" &&
+  rm "temp/fonts.zip"
   cp -r "temp/system" "$STEAMAPPS/common/assettocorsa/content/fonts/" &&
   rm -r "temp/" &&
   return
