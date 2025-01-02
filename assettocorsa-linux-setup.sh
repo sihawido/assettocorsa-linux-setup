@@ -24,6 +24,7 @@ fi
 
 installed_packages=($(ls /bin))
 installed_packages+=($(ls /usr/bin))
+installed_packages+=($(ls /usr/games 2> /dev/null))
 installed_flatpaks=($(flatpak list --columns=application))
 req_packages=("steam" "wget" "unzip")
 req_flatpaks=("protontricks")
