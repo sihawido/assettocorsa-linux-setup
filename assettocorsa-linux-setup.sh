@@ -1,18 +1,18 @@
+# Useful variables
+GE_version="9-21"; CSP_version="0.2.5"
+# Defining text styles for readablity
+bold=$(tput bold); normal=$(tput sgr0)
+
 # Checking compatability
-function os_get () { echo "$(sed "s/.* $1=//g" | sed "s/$1=\"//g" |  sed "s/ .*//g" | sed "s/\"//g")"; }
-os_release="$(cat /etc/os-release)"
-OS="$(echo $os_release | os_get ID)"
-OS_name="$(echo $os_release | os_get NAME)"
+function get_release () {
+  os_release="$(cat /etc/os-release)"
+  echo "$(echo $os_release | sed "s/.* $1=//g" | sed "s/$1=\"//g" |  sed "s/ .*//g" | sed "s/\"//g")"
+}
+OS="$(get_release ID)"; OS_name="$(get_release NAME)"
 if [ $OS == "fedora" ] || [ $OS == "ultramarine" ]; then pm_install="dnf install"
 elif [ $OS == "debian" ] || [ $OS == "ubuntu" ] || [ $OS == "linuxmint" ] || [ $OS == "pop" ]; then pm_install="apt install"
 elif [ $OS == "arch" ] || [ $OS == "endeavouros" ]; then pm_install="pacman -S"
-else echo "$OS_name is not currently supported. Feel free to open an issue to support it."; exit 1; fi
-
-# Useful variables
-GE_version="9-21"; CSP_version="0.2.5"
-
-# Defining text styles for readablity
-bold=$(tput bold); normal=$(tput sgr0)
+else echo "$OS_name is not currently supported. Please open an issue to support it."; exit 1; fi
 
 # Checking if Flatpak is set up
 flatpak_remotes="$(flatpak remotes)"
@@ -22,6 +22,7 @@ Refer to ${bold}https://flathub.org/setup${normal} to set-up Flatpak."
   exit 1
 fi
 
+# Installed and required packages
 installed_packages=($(ls /bin))
 installed_packages+=($(ls /usr/bin))
 installed_packages+=($(ls /usr/games 2> /dev/null))
@@ -30,36 +31,34 @@ req_packages=("steam" "wget" "unzip")
 req_flatpaks=("protontricks")
 
 # Checking if Steam is installed through Flatpak
-function set_to_native () {
-  default_ac_path="$HOME/.local/share/Steam/steamapps/common/assettocorsa"
-  STEAM_ROOT="$HOME/.steam/root"
-  steam_command="steam"
-}; function set_to_flatpak () {
-  default_ac_path="$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/assettocorsa"
-  STEAM_ROOT="$HOME/.var/app/com.valvesoftware.Steam/.steam/root"
-  steam_command="flatpak run com.valvesoftware.Steam"
-}
-
 if [[ ${installed_packages[@]} == *"steam"* ]] && [[ ${installed_flatpaks[@]} == *"com.valvesoftware.Steam"* ]]; then
-  echo "Steam is installed both as a native package and through Flatpak."
-  PS3="Select version to use: "
+  echo "Steam is installed both as a native package and Flatpak."
+  PS3="Select which installation of Steam to use: "
   select installation_method in "Native" "Flatpak"
   do
     installation_method="$(echo ${installation_method,,} | awk '{print $1;}')"
     if [ $installation_method == "native" ]; then
-      set_to_native
+      steam_install_method="native"
       break
     elif [ $installation_method == "flatpak" ]; then
-      set_to_flatpak
+      steam_install_method="flatpak"
       break
     fi
   done
 elif [[ ${installed_packages[@]} == *"steam"* ]]; then
-  echo "Native install of Steam found."
-  set_to_native
+  echo "Native installation of Steam found."
+  steam_install_method="native"
 elif [[ ${installed_flatpaks[@]} == *"com.valvesoftware.Steam"* ]]; then
-  echo "Flatpak install of Steam found."
-  set_to_flatpak
+  echo "Flatpak installation of Steam found."
+  steam_install_method="flatpak"
+fi
+# Setting paths depending on Steam installation
+if [[ $steam_install_method == "native" ]]; then
+  default_ac_path="$HOME/.local/share/Steam/steamapps/common/assettocorsa"
+  STEAM_ROOT="$HOME/.steam/root"
+elif [[ $steam_install_method == "flatpak" ]]; then
+  default_ac_path="$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/assettocorsa"
+  STEAM_ROOT="$HOME/.var/app/com.valvesoftware.Steam/.steam/root"
 fi
 
 # Checking if required packages are installed
@@ -79,19 +78,20 @@ echo "Dependencies found."
 
 # Defining functions
 function enter_manually () {
-  echo "Enter the path to the ${bold}steamapps${normal} directory assettocorsa is installed in: " && read steamapps
-  if [[ $steamapps == "" ]]; then
-    exit 1
-  fi
-
-  ac_dir="${steamapps}/common/assettocorsa"
-  STEAMAPPS=$steamapps
-  if [ -d $ac_dir ] && [[ $(echo $ac_dir | sed -e 's/.*assettocorsa/assettocorsa/') == "assettocorsa" ]]; then
-    echo "Directory valid. Proceeding."
-  else
-    echo "Invalid directory. Exiting."
-    exit 1
-  fi
+  echo "Enter path to ${bold}steamapps/common/assettocorsa${normal}:"
+  while :; do
+    read -i "$PWD/" -e ac_dir &&
+    ac_dir=${ac_dir%"/"} && # in case path ends with "/" (test -d doesnt work if that is the case)
+    eval "ac_dir=$ac_dir" && # In case the path includes ~
+    STEAMAPPS="${ac_dir%"/common/assettocorsa"}"
+    
+    if [ -d $ac_dir ] && [[ $(echo $ac_dir | sed -e 's/.*assettocorsa/assettocorsa/') == "assettocorsa" ]]; then
+      echo "Directory valid. Proceeding."
+      break
+    else
+      echo "Invalid directory."; echo
+    fi
+  done
 }
 function FindAC () {
   if [ -d $default_ac_path ]; then
@@ -212,5 +212,5 @@ fi
 Ask "Install DXVK? (might result in better performance for AMD GPUs)" && dxvk
 Ask "Install Content Manager?" && ContentManager
 Ask "Install CSP?" && CustomShaderPatch
-Ask "Install fonts for content manager?" && Fonts
+Ask "Install fonts for Content Manager?" && Fonts
 Ask "Install fonts for CSP?" && Fonts2
