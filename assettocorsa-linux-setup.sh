@@ -138,12 +138,12 @@ function ContentManager () {
   echo "Creating symlink..."
   ln -sf "$STEAM_ROOT/compatibilitytools.d/config/loginusers.vdf" "$STEAMAPPS/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf" &&
   echo "Installing Content Manager..." &&
-  wget -q "https://acstuff.ru/app/latest.zip" -P "temp/" &&
+  wget -q "https://acstuff.club/app/latest.zip" -P "temp/" &&
   unzip -q "temp/latest.zip" -d "temp/" &&
   mv "temp/Content Manager.exe" "temp/AssettoCorsa.exe" &&
-  mv "$STEAMAPPS/common/assettocorsa/AssettoCorsa.exe" "$STEAMAPPS/common/assettocorsa/AssettoCorsa_original.exe" &&
-  cp "temp/AssettoCorsa.exe" "$STEAMAPPS/common/assettocorsa/" &&
-  cp "temp/Manifest.json" "$STEAMAPPS/common/assettocorsa/" &&
+  mv -n "$STEAMAPPS/common/assettocorsa/AssettoCorsa.exe" "$STEAMAPPS/common/assettocorsa/AssettoCorsa_original.exe" &&
+  rm "temp/latest.zip" &&
+  cp -r "temp/"* "$STEAMAPPS/common/assettocorsa/" &&
   rm -r "temp" &&
   return
   Error "Content Manager installation failed"
@@ -170,7 +170,7 @@ Press ‘OK’ to close the window.${normal}"; echo
 
 function Fonts () {
   echo "Installing required fonts..."
-  wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/" &&
+  wget -q "https://files.acstuff.club/shared/T0Zj/fonts.zip" -P "temp/" &&
   unzip -qo "temp/fonts.zip" -d "temp/" &&
   cp -r "temp/system" "$STEAMAPPS/common/assettocorsa/content/fonts/" &&
   rm -r "temp/" &&
@@ -202,10 +202,20 @@ function Ask {
   done
 }
 
-# Asking to run function
+function CheckTempDir () {
+  if [[ -d "temp/" ]]; then
+    echo "\"temp\" directory found inside current directory. It needs to be removed or renamed for this script to work."
+    Ask "Move \"temp/\" to trash?" && gio trash "temp" --force && return
+    exit 1
+  fi
+}
+
+# Checking stuff
+CheckTempDir
 FindAC
 StartMenuShortcut
-gio trash "temp/" --force
+
+# Asking to run function
 Ask "Install Proton-GE?" && ProtonGE
 if [ ! -d "$STEAMAPPS/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
   echo "Please launch Assetto Corsa with Proton-GE to generate required files before proceeding.
