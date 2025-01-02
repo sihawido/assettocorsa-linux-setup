@@ -79,10 +79,14 @@ echo "Dependencies found."
 
 # Defining functions
 function enter_manually () {
-  Ask "Enter path to ${bold}steamapps/common/assettocorsa${normal} manually?" && read ac_dir
-  if [[ $ac_dir == "" ]]; then
+  echo "Enter the path to the ${bold}steamapps${normal} directory assettocorsa is installed in: " && read steamapps
+  if [[ $steamapps == "" ]]; then
     exit 1
-  elif [ -d $ac_dir ] && [[ $(echo $ac_dir | sed -e 's/.*assettocorsa/assettocorsa/') == "assettocorsa" ]]; then
+  fi
+
+  ac_dir="${steamapps}/common/assettocorsa"
+  STEAMAPPS=$steamapps
+  if [ -d $ac_dir ] && [[ $(echo $ac_dir | sed -e 's/.*assettocorsa/assettocorsa/') == "assettocorsa" ]]; then
     echo "Directory valid. Proceeding."
   else
     echo "Invalid directory. Exiting."
