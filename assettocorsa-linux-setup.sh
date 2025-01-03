@@ -11,7 +11,7 @@ function get_release () {
 OS="$(get_release ID)"; OS_name="$(get_release NAME)"
 if [ $OS == "fedora" ] || [ $OS == "ultramarine" ]; then pm_install="dnf install"
 elif [ $OS == "debian" ] || [ $OS == "ubuntu" ] || [ $OS == "linuxmint" ] || [ $OS == "pop" ]; then pm_install="apt install"
-elif [ $OS == "arch" ] || [ $OS == "endeavouros" ]; then pm_install="pacman -S"
+elif [ $OS == "arch" ] || [ $OS == "endeavouros" ] || [ $OS == "steamos" ]; then pm_install="pacman -S"
 else echo "$OS_name is not currently supported. Please open an issue to support it."; exit 1; fi
 
 # Checking if Flatpak is set up
