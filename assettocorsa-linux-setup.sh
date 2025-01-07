@@ -1,3 +1,8 @@
+if [[ $USER == "root" ]]; then
+  echo "Please do not run as root."
+  exit 1
+fi
+
 # Useful variables
 GE_version="9-22"; CSP_version="0.2.5"
 ## Defining text styles for readablity
