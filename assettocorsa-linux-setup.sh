@@ -12,7 +12,7 @@ supported_apt=("debian" "ubuntu" "linuxmint" "pop")
 supported_dnf=("fedora" "nobara" "ultramarine")
 supported_arch=("arch" "endeavouros" "steamos")
 ## Required native and flatpak packages
-req_packages=("wget" "tar" "unzip" "coreutils")
+req_packages=("wget" "tar" "unzip")
 req_flatpaks=("protontricks")
 
 # Checking OS compatability
