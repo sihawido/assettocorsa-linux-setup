@@ -9,10 +9,10 @@ GE_version="9-22"; CSP_version="0.2.5"
 bold=$(tput bold); normal=$(tput sgr0)
 ## Supported distros
 supported_apt=("debian" "ubuntu" "linuxmint" "pop")
-supported_dnf=("fedora" "ultramarine")
+supported_dnf=("fedora" "nobara" "ultramarine")
 supported_arch=("arch" "endeavouros" "steamos")
 ## Required native and flatpak packages
-req_packages=("wget" "unzip" "ls" "cd" "cp" "mv" "echo" "sed" "test" "read" "flatpak")
+req_packages=("wget" "tar" "unzip" "coreutils")
 req_flatpaks=("protontricks")
 
 # Checking OS compatability
@@ -201,10 +201,8 @@ function CustomShaderPatch () {
     echo "Downloading CSP..." &&
     wget -q "https://acstuff.club/patch/?get=$CSP_version" -P "temp/" &&
     echo "Installing CSP..." &&
-    cd "temp/" &&
     # For some reason the downloaded file name is weird so we have to rename it
-    mv "index.html?get=$CSP_version" "lights-patch-v$CSP_version.zip" -f &&
-    cd .. &&
+    mv "temp/index.html?get=$CSP_version" "temp/lights-patch-v$CSP_version.zip" -f &&
     unzip -qo "temp/lights-patch-v$CSP_version.zip" -d "temp/" &&
     rm "temp/lights-patch-v$CSP_version.zip" &&
     cp -r "temp/." "$STEAMAPPS/common/assettocorsa" &&
