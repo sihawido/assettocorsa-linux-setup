@@ -22,9 +22,9 @@ function get_release () {
 }
 function CheckOS () {
   OS="$(get_release ID)"; OS_name="$(get_release NAME)"
-  if [[ ${supported_dnf[*]} =~ "$OS" ]]; then pm_install="dnf install"
-  elif [[ ${supported_apt[*]} =~ "$OS" ]]; then pm_install="apt install"
-  elif [[ ${supported_arch[*]} =~ "$OS" ]]; then pm_install="pacman -S"
+  if [[ ${supported_dnf[*]} =~ "$OS" ]]; then pm_install="dnf install"; pm_list="dnf list --installed"
+  elif [[ ${supported_apt[*]} =~ "$OS" ]]; then pm_install="apt install"; pm_list="apt list --installed"
+  elif [[ ${supported_arch[*]} =~ "$OS" ]]; then pm_install="pacman -S"; pm_list="pacman -Q"
   else echo "$OS_name is not currently supported. Please open an issue to support it."; exit 1; fi
 }
 
@@ -42,9 +42,7 @@ function CheckFlathub () {
 
 # Checking if required packages are installed
 function CheckDependencies () {
-  installed_packages=($(ls /bin))
-  installed_packages+=($(ls /usr/bin))
-  installed_packages+=($(ls /usr/games 2> /dev/null)) # PopOS stores the steam exec in /usr/games
+  installed_packages=($($pm_list))
   for package in ${req_packages[@]}; do
     if [[ ${installed_packages[@]} != *$package* ]]; then
       echo "$package is not installed, run ${bold}sudo $pm_install $package${normal} to install."
@@ -116,7 +114,7 @@ function FindAC () {
     echo "Enter path to ${bold}steamapps/common/assettocorsa${normal}:"
     read -i "$PWD/" -e ac_dir &&
     ac_dir=${ac_dir%"/"} && # in case path ends with "/" (test -d doesnt work if that is the case)
-    eval "ac_dir=$ac_dir" && # In case the path includes ~
+    readlink -f "ac_dir=$ac_dir" && # In case the path includes ~
     STEAMAPPS="${ac_dir%"/common/assettocorsa"}"
     if [ -d $ac_dir ] && [[ $(echo $ac_dir | sed -e 's/.*assettocorsa/assettocorsa/') == "assettocorsa" ]]; then
       echo "Directory valid. Proceeding."
