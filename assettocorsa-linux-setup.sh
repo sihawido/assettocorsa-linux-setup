@@ -16,11 +16,11 @@ req_packages=("wget" "tar" "unzip")
 req_flatpaks=("protontricks")
 
 # Checking OS compatability
-function get_release () {
+function get_release {
   os_release="$(cat /etc/os-release)"
   echo "$(echo $os_release | sed "s/.* $1=//g" | sed "s/$1=\"//g" |  sed "s/ .*//g" | sed "s/\"//g")"
 }
-function CheckOS () {
+function CheckOS {
   OS="$(get_release ID)"; OS_name="$(get_release NAME)"
   if [[ ${supported_dnf[*]} =~ "$OS" ]]; then pm_install="dnf install"; pm_list="dnf list --installed"
   elif [[ ${supported_apt[*]} =~ "$OS" ]]; then pm_install="apt install"; pm_list="apt list --installed"
@@ -29,7 +29,7 @@ function CheckOS () {
 }
 
 # Checking if Flatpak and Flathub is set up
-function CheckFlathub () {
+function CheckFlathub {
   flatpak_remotes="$(flatpak remotes)"
   if [[ $flatpak_remotes != *"flathub"* ]]; then
     echo "Flatpak is either not installed or the Flathub remote is not configured.
@@ -41,7 +41,7 @@ function CheckFlathub () {
 }
 
 # Checking if required packages are installed
-function CheckDependencies () {
+function CheckDependencies {
   installed_packages=($($pm_list))
   for package in ${req_packages[@]}; do
     if [[ ${installed_packages[@]} != *$package* ]]; then
@@ -58,7 +58,7 @@ function CheckDependencies () {
 }
 
 # Checking if Steam is installed through Flatpak or natively
-function CheckSteamInstall () {
+function CheckSteamInstall {
   if [[ ${installed_packages[@]} == *"steam"* ]] && [[ ${installed_flatpaks[@]} == *"com.valvesoftware.Steam"* ]]; then
     echo "Steam is installed both as a native package and Flatpak."
     PS3="Select which installation of Steam to use: "
@@ -93,7 +93,7 @@ function CheckSteamInstall () {
   fi
 }
 
-function CheckTempDir () {
+function CheckTempDir {
   if [[ -d "temp/" ]]; then
     echo "\"temp\" directory found inside current directory. It needs to be removed or renamed for this script to work."
     Ask "Move \"temp/\" to trash?" && gio trash "temp" --force && return
@@ -101,7 +101,7 @@ function CheckTempDir () {
   fi
 }
 
-function FindAC () {
+function FindAC {
   if [ -d $default_ac_path ]; then
     echo "Found ${bold}$default_ac_path${normal}."
     Ask "Is that the right installation?" &&
@@ -114,9 +114,9 @@ function FindAC () {
     echo "Enter path to ${bold}steamapps/common/assettocorsa${normal}:"
     read -i "$PWD/" -e ac_dir &&
     ac_dir=${ac_dir%"/"} && # in case path ends with "/" (test -d doesnt work if that is the case)
-    readlink -f "ac_dir=$ac_dir" && # In case the path includes ~
+    ac_dir="$(echo "$ac_dir" | sed "s|\~\/|$HOME\/|g")" # in case path begins with ~/
     STEAMAPPS="${ac_dir%"/common/assettocorsa"}"
-    if [ -d $ac_dir ] && [[ $(echo $ac_dir | sed -e 's/.*assettocorsa/assettocorsa/') == "assettocorsa" ]]; then
+    if [[ -d $ac_dir ]] && [[ $(echo $ac_dir | sed -e 's/.*assettocorsa/assettocorsa/') == "assettocorsa" ]]; then
       echo "Directory valid. Proceeding."
       break
     else
@@ -125,14 +125,53 @@ function FindAC () {
   done
 }
 
-function StartMenuShortcut () {
+function StartMenuShortcut {
   if [ -f "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk" ]; then
     echo "Start Menu Shortcut for Content Manager found. This might be causing crashes on start-up."
     Ask "Delete the shortcut?" && rm "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk"
   fi
 }
 
-function CheckProtonGE () {
+function CheckPrefix {
+  if [ -d "$STEAMAPPS/compatdata/244210/pfx" ]; then
+    echo "Found existing Wineprefix, deleting it can solve problems if a previous installation failed."
+    Ask "Delete existing prefix? (preserves CM configs and presets, does not preserve mods)" && RemovePrefix
+  fi
+}
+
+function RemovePrefix {
+  if [[ -d "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager" ]]; then
+    while :; do
+      echo "Saving Content Manager configuration to 'temp'." &&
+      mkdir "temp" &&
+      cp -r "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager" "temp/" &&
+      break
+      Error "Failed to copy CM configuration to 'temp', aborting Wineprefix deletion."
+    done
+  fi
+  
+  if [[ -d "$STEAMAPPS/compatdata/244210/pfx" ]]; then
+    while :; do
+      echo "Deleting Wineprefix..." &&
+      rm -rf "$STEAMAPPS/compatdata/244210" &&
+      break
+      Error "Failed to delete '$STEAMAPPS/compatdata/244210/pfx'"
+    done
+  fi
+  
+  if [[ -d "temp/AcTools Content Manager" ]]; then
+    while :; do
+      echo "Copying preserved CM configuration..." &&
+      mkdir -p "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local" &&
+      cp -r "temp/AcTools Content Manager" "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager" &&
+      rm -rf "temp/" &&
+      break
+      Error "Failed to copy preserved CM configuration from 'temp'."
+    done
+  fi
+}
+
+function CheckProtonGE {
   protonge="GE-Proton$GE_version"
   if [[  ! -d "$STEAM_ROOT/compatibilitytools.d/GE-Proton$GE_version" ]]; then
     Ask "Install $protonge?" && InstallProtonGE
@@ -143,7 +182,7 @@ function CheckProtonGE () {
   fi
 }
 
-function InstallProtonGE () {
+function InstallProtonGE {
   if [[ -d "$STEAM_ROOT/compatibilitytools.d/GE-Proton$GE_version" ]]; then
     echo "Removing previous installation of GE-Proton$GE_version..."
     rm -rf "$STEAM_ROOT/compatibilitytools.d/GE-Proton$GE_version"
@@ -154,7 +193,8 @@ function InstallProtonGE () {
   tar -xzf "temp/GE-Proton$GE_version.tar.gz" -C "temp/" &&
   cp -rfa "temp/GE-Proton$GE_version" "$STEAM_ROOT/compatibilitytools.d" &&
   rm -rf "temp/" &&
-  echo "1. ${bold}Restart Steam.
+  echo "${bold}To enable ProtonGE for Assetto Corsa:
+1. Restart Steam.
 2. Go to Assetto Corsa > Properties > Compatability.
 3. Turn on 'Force the use of a specific Steam Play compatability tool'.
 4. From the drop-down, select $protonge.${normal}" &&
@@ -162,14 +202,14 @@ function InstallProtonGE () {
   Error "$protonge installation failed"
 }
 
-function DXVK () {
+function DXVK {
   echo "Installing DXVK..."
   flatpak run com.github.Matoking.protontricks --no-background-wineserver 244210 dxvk 1>& /dev/null &&
   return
   Error "Could not install DXVK"
 }
 
-function ContentManager () {
+function ContentManager {
   echo "Creating symlink..."
   ln -sf "$STEAM_ROOT/compatibilitytools.d/config/loginusers.vdf" "$STEAMAPPS/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf" &&
   echo "Installing Content Manager..." &&
@@ -190,12 +230,18 @@ function ContentManager () {
   Error "Content Manager installation failed"
 }
 
-function CustomShaderPatch () {
+function CustomShaderPatch {
+  reg_dwrite="$(echo "$(cat "$STEAMAPPS/compatdata/244210/pfx/user.reg")" | grep "dwrite")"
+  if [[ $reg_dwrite == "" ]]; then
+    while :; do
+      echo "Adding dll override 'dwrite'..." &&
+      sed '/\"\*d3d11"="native\"/a \"dwrite"="native,builtin\"' "$STEAMAPPS/compatdata/244210/pfx/user.reg" -i &&
+      break
+      Error "Could not create DLL override for 'dwrite'"
+    done
+  fi
+  
   while :; do
-    echo "${bold}1. In the 'Wine configuration' window, go to the ‘Libraries’ tab, type 'dwrite' into the ‘New override for library’ textbox and click ‘Add’.
-2. Look for dwrite in the list and make sure it also says ‘native, built-in’. If it doesn’t, switch it via the ‘Edit’ menu.
-3. Press ‘OK’ to close the window.${normal}"
-    flatpak run com.github.Matoking.protontricks --command "wine winecfg" 244210 2> /dev/null &&
     echo "Downloading CSP..." &&
     wget -q "https://acstuff.club/patch/?get=$CSP_version" -P "temp/" &&
     echo "Installing CSP..." &&
@@ -209,15 +255,14 @@ function CustomShaderPatch () {
     Error "CSP installation failed"
   done
   
-  # In case Flatpak protorntricks doesn't have access to the steamlibrary
-  while :; do
+  while :; do # In case Flatpak protorntricks doesn't have access to the steamlibrary
     echo "Installing fonts required for CSP..."
     IFS=";"
-    pt_file_access=($(flatpak info --show-permissions com.github.Matoking.protontricks |
+    protontricks_fs=($(flatpak info --show-permissions com.github.Matoking.protontricks |
     grep filesystems | sed 's/filesystems=//'))
     unset IFS
     declare -i has_access=0
-    for location in ${pt_file_access[@]}; do
+    for location in ${protontricks_fs[@]}; do
       eval "location=$location" 2> /dev/null
       if [[ $STEAMAPPS == "$location"* ]]; then
         has_access=1
@@ -237,7 +282,7 @@ function CustomShaderPatch () {
   done
 }
 
-function Error () {
+function Error {
   echo "${bold}ERROR${normal}: $1. If this is an issue, please report it on github."
   exit 1
 }
@@ -260,12 +305,13 @@ CheckSteamInstall
 CheckTempDir
 FindAC
 StartMenuShortcut
+CheckPrefix
 CheckProtonGE
 
 # Next steps will not work unless AC files have been generated
 if [ ! -d "$STEAMAPPS/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
   echo "Please launch Assetto Corsa with Proton-GE to generate required files before proceeding.
-(it might take a while to launch)"
+It will take a while to launch since it's creating a Wineprefix and installing dependencies."
   exit 1
 fi
 
