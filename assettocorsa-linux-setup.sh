@@ -4,7 +4,7 @@ if [[ $USER == "root" ]]; then
 fi
 
 # Useful variables
-GE_version="9-22"; CSP_version="0.2.5"
+GE_version="9-23"; CSP_version="0.2.5"
 ## Defining text styles for readablity
 bold=$(tput bold); normal=$(tput sgr0)
 ## Supported distros
@@ -93,6 +93,17 @@ function CheckSteamInstall {
   fi
 }
 
+function CheckAssettoProcess {
+  ac_pid="$(pgrep "AssettoCorsa.ex")"
+  if [[ $ac_pid != "" ]]; then
+    echo "Assetto Corsa is running."
+    Ask "Stop Assetto Corsa to proceed?" &&
+    kill $ac_pid &&
+    return
+    exit 1
+  fi
+}
+
 function CheckTempDir {
   if [[ -d "temp/" ]]; then
     echo "\"temp\" directory found inside current directory. It needs to be removed or renamed for this script to work."
@@ -135,21 +146,41 @@ function StartMenuShortcut {
 function CheckPrefix {
   if [ -d "$STEAMAPPS/compatdata/244210/pfx" ]; then
     echo "Found existing Wineprefix, deleting it can solve problems if a previous installation failed."
-    Ask "Delete existing prefix? (preserves CM configs and presets, does not preserve mods)" && RemovePrefix
+    Ask "Delete existing prefix? (preserves configs and presets)" && RemovePrefix
   fi
 }
 
 function RemovePrefix {
+  # Saving configs
+  if [[ -d "ac_configs/" ]]; then
+    while :; do
+      echo "Found previous save of AC and CM configs in ${bold}$PWD/ac_configs/${normal}."
+      Ask "Delete previous saves?" &&
+      rm -r "ac_configs/" &&
+      break
+      echo "Cannot proceed."
+      exit 1
+    done
+  fi
+  mkdir "ac_configs/"
+  if [[ -d "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/Documents/Assetto Corsa" ]]; then
+    while :; do
+      echo "Saving AC configs and presets..." &&
+      cp -r "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/Documents/Assetto Corsa" "ac_configs" &&
+      break
+      Error "Failed to copy AC configuration to 'temp', aborting deletion of Wineprefix."
+    done
+  fi
   if [[ -d "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager" ]]; then
     while :; do
-      echo "Saving Content Manager configuration to 'temp'." &&
-      mkdir "temp" &&
-      cp -r "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager" "temp/" &&
+      echo "Saving CM configs and presets..." &&
+      cp -r "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager" "ac_configs" &&
       break
-      Error "Failed to copy CM configuration to 'temp', aborting Wineprefix deletion."
+      Error "Failed to copy CM configuration to 'temp', aborting deletion of Wineprefix"
     done
   fi
   
+  # Deleting Wineprefix
   if [[ -d "$STEAMAPPS/compatdata/244210/pfx" ]]; then
     while :; do
       echo "Deleting Wineprefix..." &&
@@ -159,14 +190,30 @@ function RemovePrefix {
     done
   fi
   
-  if [[ -d "temp/AcTools Content Manager" ]]; then
+  # Copying saved configs
+  if [[ -d "ac_configs/Assetto Corsa" ]]; then
     while :; do
-      echo "Copying preserved CM configuration..." &&
-      mkdir -p "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local" &&
-      cp -r "temp/AcTools Content Manager" "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager" &&
-      rm -rf "temp/" &&
+      echo "Copying saved AC configs and presets..." &&
+      mkdir -p "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/Documents" &&
+      cp -r "ac_configs/Assetto Corsa" "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/Documents/Assetto Corsa" &&
       break
-      Error "Failed to copy preserved CM configuration from 'temp'."
+      Error "Failed to copy preserved CM configuration."
+    done
+  fi
+  if [[ -d "ac_configs/AcTools Content Manager" ]]; then
+    while :; do
+      echo "Copying saved CM configs and presets..." &&
+      mkdir -p "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local" &&
+      cp -r "ac_configs/AcTools Content Manager" "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager" &&
+      break
+      Error "Failed to copy preserved CM configuration."
+    done
+  fi
+  if [[ -d "ac_configs/" ]]; then
+    while :; do
+      rm -r "ac_configs/" &&
+      break
+      Error "Could not delete 'ac_configs/' directory"
     done
   fi
 }
@@ -302,6 +349,7 @@ CheckOS
 CheckFlathub
 CheckDependencies
 CheckSteamInstall
+CheckAssettoProcess
 CheckTempDir
 FindAC
 StartMenuShortcut
