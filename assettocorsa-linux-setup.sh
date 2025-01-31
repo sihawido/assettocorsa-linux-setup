@@ -11,6 +11,7 @@ bold=$(tput bold); normal=$(tput sgr0)
 supported_apt=("debian" "ubuntu" "linuxmint" "pop")
 supported_dnf=("fedora" "nobara" "ultramarine")
 supported_arch=("arch" "endeavouros" "steamos")
+supported_opensuse=("opensuse-tumbleweed")
 ## Required native and flatpak packages
 req_packages=("wget" "tar" "unzip")
 req_flatpaks=("protontricks")
@@ -25,6 +26,7 @@ function CheckOS {
   if [[ ${supported_dnf[*]} =~ "$OS" ]]; then pm_install="dnf install"; pm_list="dnf list --installed"
   elif [[ ${supported_apt[*]} =~ "$OS" ]]; then pm_install="apt install"; pm_list="apt list --installed"
   elif [[ ${supported_arch[*]} =~ "$OS" ]]; then pm_install="pacman -S"; pm_list="pacman -Q"
+  elif [[ ${supported_opensuse[*]} =~ "$OS" ]]; then pm_install="zypper install"; pm_list="zypper search --installed-only"
   else echo "$OS_name is not currently supported. Please open an issue to support it."; exit 1; fi
 }
 
