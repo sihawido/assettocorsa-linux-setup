@@ -4,7 +4,7 @@ if [[ $USER == "root" ]]; then
 fi
 
 # Useful variables
-GE_version="9-24"; CSP_version="0.2.5"
+GE_version="9-25"; CSP_version="0.2.5"
 ## Defining text styles for readablity
 bold=$(tput bold); normal=$(tput sgr0)
 ## Supported distros
