@@ -14,7 +14,7 @@ supported_arch=("arch" "endeavouros" "steamos")
 supported_opensuse=("opensuse-tumbleweed")
 ## Required native and flatpak packages
 req_packages=("wget" "tar" "unzip")
-req_flatpaks=("protontricks")
+req_flatpaks=("com.github.Matoking.protontricks")
 
 # Checking OS compatability
 function get_release {
