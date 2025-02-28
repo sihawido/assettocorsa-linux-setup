@@ -4,7 +4,7 @@ if [[ $USER == "root" ]]; then
 fi
 
 # Useful variables
-GE_version="9-25"; CSP_version="0.2.6"
+GE_version="9-25"; CSP_version="0.2.7"
 ## Defining text styles for readablity
 bold=$(tput bold); normal=$(tput sgr0)
 ## Supported distros
@@ -221,13 +221,28 @@ function RemovePrefix {
 }
 
 function CheckProtonGE {
-  protonge="GE-Proton$GE_version"
-  if [[  ! -d "$STEAM_ROOT/compatibilitytools.d/GE-Proton$GE_version" ]]; then
-    Ask "Install $protonge?" && InstallProtonGE
-    return
+  # Finding current ProtonGE version
+  declare -i current_ge_version=0
+  compat_tools=($(ls "$STEAM_ROOT/compatibilitytools.d/"))
+  for compat_tool in ${compat_tools[@]}; do
+    if [[ $compat_tool == "GE-Proton"* ]]; then
+      declare -i compat_tool_version=$(echo $compat_tool | sed 's/GE-Proton//g' | sed 's/-//g')
+      if (( $compat_tool_version > $current_ge_version )); then
+        declare -i current_GE_version=$compat_tool_version
+        current_GE="$(echo $compat_tool | sed 's/GE-Proton/ProtonGE/g')"
+      fi
+    fi
+  done
+  
+  # Asking for user input
+  ProtonGE="ProtonGE $GE_version"
+  declare -i GE_tobeinstalled=$(echo $GE_version | sed 's|-||g')
+  if (( $GE_tobeinstalled == $current_GE_version )); then
+    Ask "Reinstall $ProtonGE?" && InstallProtonGE
+  elif (( $GE_tobeinstalled < $current_GE_version )); then
+    Ask "$current_GE is already installed. Update to $ProtonGE?" && InstallProtonGE
   else
-    echo "Found installation of GE-Proton$GE_version."
-    Ask "Reinstall $protonge?" && InstallProtonGE
+    Ask "Install $ProtonGE?" && InstallProtonGE
   fi
 }
 
@@ -236,9 +251,9 @@ function InstallProtonGE {
     echo "Removing previous installation of GE-Proton$GE_version..."
     rm -rf "$STEAM_ROOT/compatibilitytools.d/GE-Proton$GE_version"
   fi
-  echo "Downloading $protonge..."
+  echo "Downloading $ProtonGE..."
   wget -q "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton$GE_version/GE-Proton$GE_version.tar.gz" -P "temp/" &&
-  echo "Installing $protonge..." &&
+  echo "Installing $ProtonGE..." &&
   tar -xzf "temp/GE-Proton$GE_version.tar.gz" -C "temp/" &&
   cp -rfa "temp/GE-Proton$GE_version" "$STEAM_ROOT/compatibilitytools.d" &&
   rm -rf "temp/" &&
@@ -246,9 +261,9 @@ function InstallProtonGE {
 1. Restart Steam.
 2. Go to Assetto Corsa > Properties > Compatability.
 3. Turn on 'Force the use of a specific Steam Play compatability tool'.
-4. From the drop-down, select $protonge.${normal}" &&
+4. From the drop-down, select $ProtonGE.${normal}" &&
   return
-  Error "$protonge installation failed"
+  Error "$ProtonGE installation failed"
 }
 
 function DXVK {
@@ -279,7 +294,22 @@ function ContentManager {
   Error "Content Manager installation failed"
 }
 
-function CustomShaderPatch {
+function CheckCSP {
+  data_manifest_file="$STEAMAPPS/common/assettocorsa/extension/config/data_manifest.ini"
+  if [[ -f "$data_manifest_file" ]]; then
+    current_CSP_version="$(cat "$data_manifest_file" | grep "SHADERS_PATCH=" | sed 's/SHADERS_PATCH=//g')"
+  fi
+  
+  if [[ $current_CSP_version == "" ]]; then
+    Ask "Install CSP (Custom Shaders Patch) v$CSP_version?" && InstallCSP
+  elif [[ $current_CSP_version == "$CSP_version" ]]; then
+    Ask "Reinstall CSP v$CSP_version?" && InstallCSP
+  else
+    Ask "CSP v$current_CSP_version is already installed. Install CSP v$CSP_version instead?" && InstallCSP
+  fi
+}
+function InstallCSP {
+  # Adding dwrite dll override
   reg_dwrite="$(echo "$(cat "$STEAMAPPS/compatdata/244210/pfx/user.reg")" | grep "dwrite")"
   if [[ $reg_dwrite == "" ]]; then
     while :; do
@@ -290,6 +320,7 @@ function CustomShaderPatch {
     done
   fi
   
+  # Installing CSP
   while :; do
     echo "Downloading CSP..." &&
     wget -q "https://acstuff.club/patch/?get=$CSP_version" -P "temp/" &&
@@ -304,9 +335,11 @@ function CustomShaderPatch {
     Error "CSP installation failed"
   done
   
-  while :; do # In case Flatpak protorntricks doesn't have access to the steamlibrary
+  # Installing fonts for CSP
+  while :; do
     echo "Installing fonts required for CSP... (this might take a while)"
     IFS=";"
+    # Checking if flatpak protorntricks doesn't have access to the steamlibrary
     protontricks_fs=($(flatpak info --show-permissions com.github.Matoking.protontricks |
     grep filesystems | sed 's/filesystems=//'))
     unset IFS
@@ -367,5 +400,5 @@ fi
 
 Ask "Install DXVK? (might result in better performance for AMD GPUs)" && DXVK
 Ask "Install Content Manager?" && ContentManager
-Ask "Install CSP?" && CustomShaderPatch
-echo; echo "${bold}All done!${normal}"
+CheckCSP
+echo "${bold}All done!${normal}"
