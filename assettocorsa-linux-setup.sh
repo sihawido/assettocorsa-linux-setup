@@ -16,6 +16,29 @@ supported_opensuse=("opensuse-tumbleweed")
 req_packages=("wget" "tar" "unzip")
 req_flatpaks=("com.github.Matoking.protontricks")
 
+# Setting paths
+function set_paths_for {
+  # Setting steam paths
+  if [[ $1 == "steam" ]]; then
+    if [[ $2 == "native" ]]; then
+      local="$HOME"
+    elif [[ $2 == "flatpak" ]]; then
+      local="$HOME/.var/app/com.valvesoftware.Steam"
+    else
+      Error "set_paths_for: '$1 $2' is not a valid option"
+    fi
+    AC_COMMON="$local/.local/share/Steam/steamapps/common/assettocorsa"
+    COMPAT_TOOLS_DIR="$local/.steam/root/compatibilitytools.d"
+  # Setting AC paths
+  elif [[ $1 == "assettocorsa" ]]; then
+    AC_COMMON="$2"
+    STEAMAPPS="${AC_COMMON%"/common/assettocorsa"}"
+    AC_COMPATDATA="$STEAMAPPS/compatdata/244210"
+  else
+    Error "set_paths_for: '$1' is not a valid option"
+  fi
+}
+
 # Checking OS compatability
 function get_release {
   os_release="$(cat /etc/os-release)"
@@ -27,24 +50,25 @@ function CheckOS {
   elif [[ ${supported_apt[*]} =~ "$OS" ]]; then pm_install="apt install"; pm_list="apt list --installed"
   elif [[ ${supported_arch[*]} =~ "$OS" ]]; then pm_install="pacman -S"; pm_list="pacman -Q"
   elif [[ ${supported_opensuse[*]} =~ "$OS" ]]; then pm_install="zypper install"; pm_list="zypper search --installed-only"
-  else echo "$OS_name is not currently supported. Please open an issue to support it."; exit 1; fi
+  else
+    echo "$OS_name is not currently supported. Please open an issue to support it."
+    exit 1
+  fi
 }
 
 # Checking if Flatpak and Flathub is set up
 function CheckFlathub {
-  flatpak_remotes="$(flatpak remotes)"
-  if [[ $flatpak_remotes != *"flathub"* ]]; then
+  if [[ $(flatpak remotes) != *"flathub"* ]]; then
     echo "Flatpak is either not installed or the Flathub remote is not configured.
   Refer to ${bold}https://flathub.org/setup${normal} to set-up Flatpak."
     exit 1
-  else
-    installed_flatpaks=($(flatpak list --columns=application))
   fi
 }
 
 # Checking if required packages are installed
 function CheckDependencies {
   installed_packages=($($pm_list))
+  installed_flatpaks=($(flatpak list --columns=application))
   for package in ${req_packages[@]}; do
     if [[ ${installed_packages[@]} != *$package* ]]; then
       echo "$package is not installed, run ${bold}sudo $pm_install $package${normal} to install."
@@ -66,43 +90,33 @@ function CheckSteamInstall {
     PS3="Select which installation of Steam to use: "
     select installation_method in "Native" "Flatpak"
     do
-      installation_method="$(echo ${installation_method,,} | awk '{print $1;}')" # converting to lowercase and using only the first word
+      installation_method="$(echo ${installation_method,,} | awk '{print $1;}')" # Converting to lowercase and getting the first word
       if [ $installation_method == "native" ]; then
-        steam_install_method="native"
+        set_paths_for steam native
         break
       elif [ $installation_method == "flatpak" ]; then
-        steam_install_method="flatpak"
+        set_paths_for steam flatpak
         break
       fi
     done
   elif [[ ${installed_packages[@]} == *"steam"* ]]; then
     echo "Native installation of Steam found."
-    steam_install_method="native"
+    set_paths_for steam native
   elif [[ ${installed_flatpaks[@]} == *"com.valvesoftware.Steam"* ]]; then
     echo "Flatpak installation of Steam found."
-    steam_install_method="flatpak"
+    set_paths_for steam flatpak
   else
     echo "Steam installation not found. Native and Flatpak versions of Steam are supported."
     exit 1
-  fi
-  # Setting paths depending on Steam installation
-  if [[ $steam_install_method == "native" ]]; then
-    default_ac_path="$HOME/.local/share/Steam/steamapps/common/assettocorsa"
-    STEAM_ROOT="$HOME/.steam/root"
-  elif [[ $steam_install_method == "flatpak" ]]; then
-    default_ac_path="$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/assettocorsa"
-    STEAM_ROOT="$HOME/.var/app/com.valvesoftware.Steam/.steam/root"
   fi
 }
 
 function CheckAssettoProcess {
   ac_pid="$(pgrep "AssettoCorsa.ex")"
   if [[ $ac_pid != "" ]]; then
-    echo "Assetto Corsa is running."
-    Ask "Stop Assetto Corsa to proceed?" &&
-    kill $ac_pid &&
+    Ask "Assetto Corsa is running. Stop Assetto Corsa to proceed?" && kill "$ac_pid" &&
     return
-    exit 1
+    exit
   fi
 }
 
@@ -115,22 +129,21 @@ function CheckTempDir {
 }
 
 function FindAC {
-  if [ -d $default_ac_path ]; then
-    echo "Found ${bold}$default_ac_path${normal}."
+  if [ -d $AC_COMMON ]; then
+    echo "Found ${bold}$AC_COMMON${normal}."
     Ask "Is that the right installation?" &&
-    STEAMAPPS="${default_ac_path%"/common/assettocorsa"}" &&
+    set_paths_for assettocorsa "$AC_COMMON" &&
     return
   else
     echo "Could not find Asseto Corsa in the default path."
   fi
   while :; do
     echo "Enter path to ${bold}steamapps/common/assettocorsa${normal}:"
-    read -i "$PWD/" -e ac_dir &&
-    ac_dir=${ac_dir%"/"} && # in case path ends with "/" (test -d doesnt work if that is the case)
-    ac_dir="$(echo "$ac_dir" | sed "s|\~\/|$HOME\/|g")" # in case path begins with ~/
-    STEAMAPPS="${ac_dir%"/common/assettocorsa"}"
-    if [[ -d $ac_dir ]] && [[ $(echo $ac_dir | sed -e 's/.*assettocorsa/assettocorsa/') == "assettocorsa" ]]; then
-      echo "Directory valid. Proceeding."
+    read -i "$PWD/" -e AC_COMMON &&
+    # Converting '~/directory/' to '/home/user/directory'
+    AC_COMMON="$(echo "${AC_COMMON%"/"}" | sed "s|\~\/|$HOME\/|g")"
+    if [[ -d $AC_COMMON ]] && [[ $(basename "$AC_COMMON") == "assettocorsa" ]]; then
+      set_paths_for assettocorsa "$AC_COMMON"
       break
     else
       echo "Invalid directory."; echo
@@ -139,65 +152,67 @@ function FindAC {
 }
 
 function StartMenuShortcut {
-  if [ -f "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk" ]; then
+  link_file="$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk"
+  if [[ -f "$link_file" ]]; then
     echo "Start Menu Shortcut for Content Manager found. This might be causing crashes on start-up."
-    Ask "Delete the shortcut?" && rm "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk"
+    Ask "Delete the shortcut?" && rm "$link_file" 
   fi
 }
 
 function CheckPrefix {
-  if [ -d "$STEAMAPPS/compatdata/244210/pfx" ]; then
-    echo "Found existing Wineprefix, deleting it can solve problems if a previous installation failed."
-    Ask "Delete existing prefix? (preserves configs and presets)" && RemovePrefix
+  if [ -d "$AC_COMPATDATA/pfx" ]; then
+    echo "Found existing Wineprefix, deleting it may solve AC not launching/crashing."
+    Ask "Delete existing Wineprefix and Content Manager? (preserves configs, presets and mods)" && RemovePrefix
   fi
 }
-
 function RemovePrefix {
-  # Saving configs
+  # Asking whether to get rid of previous configs
   if [[ -d "ac_configs/" ]]; then
     while :; do
       echo "Found previous save of AC and CM configs in ${bold}$PWD/ac_configs/${normal}."
-      Ask "Delete previous saves?" &&
+      Ask "Delete previous saves to proceed?" &&
       rm -r "ac_configs/" &&
       break
-      echo "Cannot proceed."
       exit 1
     done
   fi
+  # Saving configs
   mkdir "ac_configs/"
-  if [[ -d "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/Documents/Assetto Corsa" ]]; then
+  ac_config_dir="$AC_COMPATDATA/pfx/drive_c/users/steamuser/Documents/Assetto Corsa"
+  cm_config_dir="$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager"
+  if [[ -d "$ac_config_dir" ]]; then
     while :; do
       echo "Saving AC configs and presets..." &&
-      cp -r "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/Documents/Assetto Corsa" "ac_configs" &&
+      cp -r "$ac_config_dir" "ac_configs" &&
       break
       Error "Failed to copy AC configuration to 'temp', aborting deletion of Wineprefix."
     done
   fi
-  if [[ -d "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager" ]]; then
+  if [[ -d "$cm_config_dir" ]]; then
     while :; do
       echo "Saving CM configs and presets..." &&
-      cp -r "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager" "ac_configs" &&
+      cp -r "$cm_config_dir" "ac_configs" &&
       break
       Error "Failed to copy CM configuration to 'temp', aborting deletion of Wineprefix"
     done
   fi
-  
   # Deleting Wineprefix
-  if [[ -d "$STEAMAPPS/compatdata/244210/pfx" ]]; then
+  if [[ -d "$AC_COMPATDATA/pfx" ]]; then
     while :; do
       echo "Deleting Wineprefix..." &&
-      rm -rf "$STEAMAPPS/compatdata/244210" &&
+      rm -rf "$AC_COMPATDATA" &&
       break
-      Error "Failed to delete '$STEAMAPPS/compatdata/244210/pfx'"
+      Error "Failed to delete '$AC_COMPATDATA/pfx'"
     done
   fi
-  
-  # Copying saved configs
+  # Copying back the saved configs
+  declare -i copied=0
   if [[ -d "ac_configs/Assetto Corsa" ]]; then
     while :; do
       echo "Copying saved AC configs and presets..." &&
-      mkdir -p "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/Documents" &&
-      cp -r "ac_configs/Assetto Corsa" "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/Documents/Assetto Corsa" &&
+      mkdir -p "$AC_COMPATDATA/pfx/drive_c/users/steamuser/Documents" &&
+      cp -r "ac_configs/Assetto Corsa" "$ac_config_dir" &&
+      copied+=1 &&
       break
       Error "Failed to copy preserved CM configuration."
     done
@@ -205,17 +220,31 @@ function RemovePrefix {
   if [[ -d "ac_configs/AcTools Content Manager" ]]; then
     while :; do
       echo "Copying saved CM configs and presets..." &&
-      mkdir -p "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local" &&
-      cp -r "ac_configs/AcTools Content Manager" "$STEAMAPPS/compatdata/244210/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager" &&
+      mkdir -p "$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local" &&
+      cp -r "ac_configs/AcTools Content Manager" "$cm_config_dir" &&
+      copied+=1 &&
       break
       Error "Failed to copy preserved CM configuration."
     done
   fi
-  if [[ -d "ac_configs/" ]]; then
+  # Deleting the saved configs
+  if [[ -d "ac_configs/" ]] && (( $copied == 2 )); then
     while :; do
       rm -r "ac_configs/" &&
       break
       Error "Could not delete 'ac_configs/' directory"
+    done
+  fi
+  # Deleting Content Manager
+  ac_exe="$AC_COMMON/AssettoCorsa.exe"
+  ac_original_exe="$AC_COMMON/AssettoCorsa_original.exe"
+  if [[ -f "$ac_original_exe" ]]; then
+    while :; do
+      echo "Removing AC executable..." &&
+      rm "$ac_exe" &&
+      mv "$ac_original_exe" "$ac_exe" &&
+      break
+      Error "Failed to delete Content Manager executable"
     done
   fi
 }
@@ -223,7 +252,7 @@ function RemovePrefix {
 function CheckProtonGE {
   # Finding current ProtonGE version
   declare -i current_ge_version=0
-  compat_tools=($(ls "$STEAM_ROOT/compatibilitytools.d/"))
+  compat_tools=($(ls "$COMPAT_TOOLS_DIR/"))
   for compat_tool in ${compat_tools[@]}; do
     if [[ $compat_tool == "GE-Proton"* ]]; then
       declare -i compat_tool_version=$(echo $compat_tool | sed 's/GE-Proton//g' | sed 's/-//g')
@@ -233,29 +262,32 @@ function CheckProtonGE {
       fi
     fi
   done
-  
-  # Asking for user input
+  # Asking whether to install ProtonGE
   ProtonGE="ProtonGE $GE_version"
   declare -i GE_tobeinstalled=$(echo $GE_version | sed 's|-||g')
   if (( $GE_tobeinstalled == $current_GE_version )); then
     Ask "Reinstall $ProtonGE?" && InstallProtonGE
-  elif (( $GE_tobeinstalled < $current_GE_version )); then
+  elif (( $GE_tobeinstalled > $current_GE_version )); then
     Ask "$current_GE is already installed. Update to $ProtonGE?" && InstallProtonGE
+  elif (( $GE_tobeinstalled < $current_GE_version )); then
+    Ask "$current_GE is already installed. Downgrade to $ProtonGE?" && InstallProtonGE
   else
     Ask "Install $ProtonGE?" && InstallProtonGE
   fi
 }
-
 function InstallProtonGE {
-  if [[ -d "$STEAM_ROOT/compatibilitytools.d/GE-Proton$GE_version" ]]; then
+  # Deleting previous install
+  if [[ -d "$COMPAT_TOOLS_DIR/GE-Proton$GE_version" ]]; then
     echo "Removing previous installation of GE-Proton$GE_version..."
-    rm -rf "$STEAM_ROOT/compatibilitytools.d/GE-Proton$GE_version"
+    rm -rf "$COMPAT_TOOLS_DIR/GE-Proton$GE_version"
   fi
+  # Installing ProtonGE
   echo "Downloading $ProtonGE..."
   wget -q "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton$GE_version/GE-Proton$GE_version.tar.gz" -P "temp/" &&
   echo "Installing $ProtonGE..." &&
+  mkdir -p "$COMPAT_TOOLS_DIR" &&
   tar -xzf "temp/GE-Proton$GE_version.tar.gz" -C "temp/" &&
-  cp -rfa "temp/GE-Proton$GE_version" "$STEAM_ROOT/compatibilitytools.d" &&
+  cp -rfa "temp/GE-Proton$GE_version" "$COMPAT_TOOLS_DIR" &&
   rm -rf "temp/" &&
   echo "${bold}To enable ProtonGE for Assetto Corsa:
 1. Restart Steam.
@@ -274,32 +306,36 @@ function DXVK {
 }
 
 function ContentManager {
+  # Creating symlink
   echo "Creating symlink..."
-  ln -sf "$STEAM_ROOT/compatibilitytools.d/config/loginusers.vdf" "$STEAMAPPS/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf" &&
+  ln -sf "$COMPAT_TOOLS_DIR/config/loginusers.vdf" "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf" &&
+  # Installing CM
   echo "Installing Content Manager..." &&
   wget -q "https://acstuff.club/app/latest.zip" -P "temp/" &&
   unzip -q "temp/latest.zip" -d "temp/" &&
   mv "temp/Content Manager.exe" "temp/AssettoCorsa.exe" &&
-  mv -n "$STEAMAPPS/common/assettocorsa/AssettoCorsa.exe" "$STEAMAPPS/common/assettocorsa/AssettoCorsa_original.exe" &&
+  mv -n "$AC_COMMON/AssettoCorsa.exe" "$AC_COMMON/AssettoCorsa_original.exe" &&
   rm "temp/latest.zip" &&
-  cp -r "temp/"* "$STEAMAPPS/common/assettocorsa/" &&
+  cp -r "temp/"* "$AC_COMMON/" &&
   rm -r "temp" &&
+  # Installing fonts
   echo "Installing fonts required for Content Manager..." &&
   wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/" &&
   unzip -qo "temp/fonts.zip" -d "temp/" &&
   rm "temp/fonts.zip"
-  cp -r "temp/system" "$STEAMAPPS/common/assettocorsa/content/fonts/" &&
+  cp -r "temp/system" "$AC_COMMON/content/fonts/" &&
   rm -r "temp/" &&
   return
   Error "Content Manager installation failed"
 }
 
 function CheckCSP {
-  data_manifest_file="$STEAMAPPS/common/assettocorsa/extension/config/data_manifest.ini"
+  # Getting CSP version
+  data_manifest_file="$AC_COMMON/extension/config/data_manifest.ini"
   if [[ -f "$data_manifest_file" ]]; then
     current_CSP_version="$(cat "$data_manifest_file" | grep "SHADERS_PATCH=" | sed 's/SHADERS_PATCH=//g')"
   fi
-  
+  # Asking whether to install
   if [[ $current_CSP_version == "" ]]; then
     Ask "Install CSP (Custom Shaders Patch) v$CSP_version?" && InstallCSP
   elif [[ $current_CSP_version == "$CSP_version" ]]; then
@@ -310,16 +346,15 @@ function CheckCSP {
 }
 function InstallCSP {
   # Adding dwrite dll override
-  reg_dwrite="$(echo "$(cat "$STEAMAPPS/compatdata/244210/pfx/user.reg")" | grep "dwrite")"
+  reg_dwrite="$(echo "$(cat "$AC_COMPATDATA/pfx/user.reg")" | grep "dwrite")"
   if [[ $reg_dwrite == "" ]]; then
     while :; do
       echo "Adding dll override 'dwrite'..." &&
-      sed '/\"\*d3d11"="native\"/a \"dwrite"="native,builtin\"' "$STEAMAPPS/compatdata/244210/pfx/user.reg" -i &&
+      sed '/\"\*d3d11"="native\"/a \"dwrite"="native,builtin\"' "$AC_COMPATDATA/pfx/user.reg" -i &&
       break
       Error "Could not create DLL override for 'dwrite'"
     done
   fi
-  
   # Installing CSP
   while :; do
     echo "Downloading CSP..." &&
@@ -329,46 +364,52 @@ function InstallCSP {
     mv "temp/index.html?get=$CSP_version" "temp/lights-patch-v$CSP_version.zip" -f &&
     unzip -qo "temp/lights-patch-v$CSP_version.zip" -d "temp/" &&
     rm "temp/lights-patch-v$CSP_version.zip" &&
-    cp -r "temp/." "$STEAMAPPS/common/assettocorsa" &&
+    cp -r "temp/." "$AC_COMMON" &&
     rm -r "temp" &&
     break
     Error "CSP installation failed"
   done
-  
-  # Installing fonts for CSP
+  # Checking if flatpak protorntricks doesn't have access to the steamlibrary
   while :; do
-    echo "Installing fonts required for CSP... (this might take a while)"
     IFS=";"
-    # Checking if flatpak protorntricks doesn't have access to the steamlibrary
     protontricks_fs=($(flatpak info --show-permissions com.github.Matoking.protontricks |
     grep filesystems | sed 's/filesystems=//'))
     unset IFS
-    declare -i has_access=0
+    has_access="no"
     for location in ${protontricks_fs[@]}; do
       eval "location=$location" 2> /dev/null
       if [[ $STEAMAPPS == "$location"* ]]; then
-        has_access=1
+        has_access="yes"
       fi
     done
-    while (( $has_access == 0 )); do
-      command="sudo flatpak override com.github.Matoking.protontricks --filesystem="${STEAMAPPS%"/STEAMAPPS"}""
-      echo "Flatpak version of protontricks might not have access to ${STEAMAPPS%"/STEAMAPPS"}."
-      echo "Running \"${bold}$command${normal}\""
-      eval $command &&
-      break
-      Error "Could not acquire permissions for protontricks"
-    done
+    if [[ $has_access == "no" ]]; then
+      ask_for_protontricks_permission
+    fi
+  done
+  # Installing fonts for CSP
+  while :; do
+    echo "Installing fonts required for CSP... (this might take a while)"
     flatpak run com.github.Matoking.protontricks 244210 corefonts 1>& /dev/null &&
     return
     Error "Could not install corefonts for CSP"
   done
 }
+function ask_for_protontricks_permission {
+  while :; do
+    command="sudo flatpak override com.github.Matoking.protontricks --filesystem="${STEAMAPPS%"/STEAMAPPS"}"" &&
+    echo "Flatpak version of protontricks might not have access to ${STEAMAPPS%"/STEAMAPPS"}." &&
+    echo "Running \"${bold}$command${normal}\"" &&
+    eval $command &&
+    break
+    Error "Could not acquire permissions for protontricks"
+  done
+}
 
+# Helper functions
 function Error {
   echo "${bold}ERROR${normal}: $1. If this is an issue, please report it on github."
   exit 1
 }
-
 function Ask {
   while true; do
     read -p "$* [y/n]: " yn
@@ -379,20 +420,21 @@ function Ask {
   done
 }
 
-# Running functions
+# Checking stuff
 CheckOS
 CheckFlathub
 CheckDependencies
 CheckSteamInstall
 CheckAssettoProcess
 CheckTempDir
+# Running functions
 FindAC
 StartMenuShortcut
 CheckPrefix
 CheckProtonGE
 
 # Next steps will not work unless AC files have been generated
-if [ ! -d "$STEAMAPPS/compatdata/244210/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
+if [ ! -d "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
   echo "Please launch Assetto Corsa with Proton-GE to generate required files before proceeding.
 It will take a while to launch since it's creating a Wineprefix and installing dependencies."
   exit 1
