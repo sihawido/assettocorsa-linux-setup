@@ -298,13 +298,6 @@ function InstallProtonGE {
   Error "$ProtonGE installation failed"
 }
 
-function DXVK {
-  echo "Installing DXVK..."
-  flatpak run com.github.Matoking.protontricks --no-background-wineserver 244210 dxvk 1>& /dev/null &&
-  return
-  Error "Could not install DXVK"
-}
-
 function ContentManager {
   # Creating symlink
   echo "Creating symlink..."
@@ -349,11 +342,13 @@ function InstallCSP {
   reg_dwrite="$(echo "$(cat "$AC_COMPATDATA/pfx/user.reg")" | grep "dwrite")"
   if [[ $reg_dwrite == "" ]]; then
     while :; do
-      echo "Adding dll override 'dwrite'..." &&
+      echo "Adding DLL override 'dwrite'..." &&
       sed '/\"\*d3d11"="native\"/a \"dwrite"="native,builtin\"' "$AC_COMPATDATA/pfx/user.reg" -i &&
       break
       Error "Could not create DLL override for 'dwrite'"
     done
+  else
+    echo "DLL override 'dwrite' already exists."
   fi
   # Installing CSP
   while :; do
@@ -373,11 +368,9 @@ function InstallCSP {
   while :; do
     IFS=";"
     protontricks_fs=($(flatpak info --show-permissions com.github.Matoking.protontricks |
-    grep filesystems | sed 's/filesystems=//'))
-    unset IFS
-    has_access="no"
+    grep filesystems | sed 's|filesystems=||' | sed "s|~|$HOME|g"))
+    unset IFS; has_access="no"
     for location in ${protontricks_fs[@]}; do
-      eval "location=$location" 2> /dev/null
       if [[ $STEAMAPPS == "$location"* ]]; then
         has_access="yes"
       fi
@@ -385,6 +378,7 @@ function InstallCSP {
     if [[ $has_access == "no" ]]; then
       ask_for_protontricks_permission
     fi
+    break
   done
   # Installing fonts for CSP
   while :; do
@@ -403,6 +397,13 @@ function ask_for_protontricks_permission {
     break
     Error "Could not acquire permissions for protontricks"
   done
+}
+
+function DXVK {
+  echo "Installing DXVK..."
+  flatpak run com.github.Matoking.protontricks --no-background-wineserver 244210 dxvk 1>& /dev/null &&
+  return
+  Error "Could not install DXVK"
 }
 
 # Helper functions
@@ -440,7 +441,7 @@ It will take a while to launch since it's creating a Wineprefix and installing d
   exit 1
 fi
 
-Ask "Install DXVK? (might result in better performance for AMD GPUs)" && DXVK
 Ask "Install Content Manager?" && ContentManager
 CheckCSP
+Ask "Install DXVK? (might result in better performance for AMD GPUs)" && DXVK
 echo "${bold}All done!${normal}"
