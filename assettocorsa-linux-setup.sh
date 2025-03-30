@@ -20,15 +20,21 @@ req_flatpaks=("com.github.Matoking.protontricks")
 function set_paths_for {
   # Setting steam paths
   if [[ $1 == "steam" ]]; then
+    # Setting native paths
     if [[ $2 == "native" ]]; then
-      local="$HOME"
+      LOCAL="$HOME/.local"
+      APPLAUNCH_AC="steam -applaunch 244210 %u"
+    # Setting flatpak paths
     elif [[ $2 == "flatpak" ]]; then
-      local="$HOME/.var/app/com.valvesoftware.Steam"
+      LOCAL="$HOME/.var/app/com.valvesoftware.Steam"
+      APPLAUNCH_AC="flatpak run com.valvesoftware.Steam -applaunch 244210 %u"
     else
       Error "set_paths_for: '$1 $2' is not a valid option"
     fi
-    AC_COMMON="$local/.local/share/Steam/steamapps/common/assettocorsa"
-    COMPAT_TOOLS_DIR="$local/.steam/root/compatibilitytools.d"
+    # Setting universal paths
+    AC_COMMON="$LOCAL/share/Steam/steamapps/common/assettocorsa"
+    COMPAT_TOOLS_DIR="$LOCAL/share/Steam/compatibilitytools.d"
+    AC_DESKTOP="$LOCAL/share/applications/Assetto Corsa.desktop"
   # Setting AC paths
   elif [[ $1 == "assettocorsa" ]]; then
     AC_COMMON="$2"
@@ -298,28 +304,65 @@ function InstallProtonGE {
   Error "$ProtonGE installation failed"
 }
 
-function ContentManager {
-  # Creating symlink
-  echo "Creating symlink..."
-  ln -sf "$COMPAT_TOOLS_DIR/config/loginusers.vdf" "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf" &&
+function CheckContentManager {
+  if [[ -f "$AC_COMMON/AssettoCorsa_original.exe" ]]; then
+    Ask "Reinstall Content Manager?" && InstallContentManager
+  else
+    Ask "Install Content Manager?" && InstallContentManager
+  fi
+}
+function InstallContentManager {
   # Installing CM
-  echo "Installing Content Manager..." &&
-  wget -q "https://acstuff.club/app/latest.zip" -P "temp/" &&
-  unzip -q "temp/latest.zip" -d "temp/" &&
-  mv "temp/Content Manager.exe" "temp/AssettoCorsa.exe" &&
-  mv -n "$AC_COMMON/AssettoCorsa.exe" "$AC_COMMON/AssettoCorsa_original.exe" &&
-  rm "temp/latest.zip" &&
-  cp -r "temp/"* "$AC_COMMON/" &&
-  rm -r "temp" &&
+  while :; do
+    echo "Installing Content Manager..." &&
+    wget -q "https://acstuff.club/app/latest.zip" -P "temp/" &&
+    unzip -q "temp/latest.zip" -d "temp/" &&
+    mv "temp/Content Manager.exe" "temp/AssettoCorsa.exe" &&
+    mv -n "$AC_COMMON/AssettoCorsa.exe" "$AC_COMMON/AssettoCorsa_original.exe" &&
+    rm "temp/latest.zip" &&
+    cp -r "temp/"* "$AC_COMMON/" &&
+    rm -r "temp" &&
+    break
+    Error "Content Manager installation failed"
+  done
   # Installing fonts
-  echo "Installing fonts required for Content Manager..." &&
-  wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/" &&
-  unzip -qo "temp/fonts.zip" -d "temp/" &&
-  rm "temp/fonts.zip"
-  cp -r "temp/system" "$AC_COMMON/content/fonts/" &&
-  rm -r "temp/" &&
-  return
-  Error "Content Manager installation failed"
+  while :; do
+    echo "Installing fonts required for Content Manager..." &&
+    wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/" &&
+    unzip -qo "temp/fonts.zip" -d "temp/" &&
+    rm "temp/fonts.zip" &&
+    cp -r "temp/system" "$AC_COMMON/content/fonts/" &&
+    rm -r "temp/" &&
+    break
+    Error "Font installation for CM failed"
+  done
+  # Creating symlink
+  while :; do
+    echo "Creating symlink..." &&
+    link_from="$LOCAL/share/Steam/config/loginusers.vdf" &&
+    link_to="$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf" &&
+    ln -sf "$link_from" "$link_to" &&
+    break
+    Error "Failed to create the symlink for CM"
+  done
+  # Adding ability to open acmanager uri links
+  if [[ -f "$AC_DESKTOP" ]]; then
+    while :; do
+      mimelist="$HOME/.config/mimeapps.list" &&
+      # Cleaning up previous modifications to mimeapps.list
+      sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop;||g" -i "$mimelist" &&
+      sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop||g" -i "$mimelist" &&
+      sed '$!N; /^\(.*\)\n\1$/!P; D' -i "$mimelist" &&
+      # Adding acmanager to mimeapps.list
+      echo "Adding ability to open acmanager links..." &&
+      gio mime x-scheme-handler/acmanager "Assetto Corsa.desktop" 1>& /dev/null &&
+      sed "s|steam steam://rungameid/244210|$APPLAUNCH_AC|g" -i "$AC_DESKTOP" &&
+      break
+      Error "Could not add acmanager to mimeapps.list"
+    done
+  else
+    echo "Assetto Corsa does not have a .desktop shortcut, URI links to CM will not work."
+  fi
 }
 
 function CheckCSP {
@@ -421,6 +464,14 @@ function Ask {
   done
 }
 
+function check_generated_files {
+  if [ ! -d "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
+    echo "Please launch Assetto Corsa with Proton-GE to generate required files before proceeding.
+  It will take a while to launch since it's creating a Wineprefix and installing dependencies."
+    exit 1
+  fi
+}
+
 # Checking stuff
 CheckOS
 CheckFlathub
@@ -433,15 +484,10 @@ FindAC
 StartMenuShortcut
 CheckPrefix
 CheckProtonGE
-
-# Next steps will not work unless AC files have been generated
-if [ ! -d "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
-  echo "Please launch Assetto Corsa with Proton-GE to generate required files before proceeding.
-It will take a while to launch since it's creating a Wineprefix and installing dependencies."
-  exit 1
-fi
-
-Ask "Install Content Manager?" && ContentManager
+# Checking if assettocorsa's files were generated
+check_generated_files
+# Continuing to run functions
+CheckContentManager
 CheckCSP
 Ask "Install DXVK? (might result in better performance for AMD GPUs)" && DXVK
 echo "${bold}All done!${normal}"
