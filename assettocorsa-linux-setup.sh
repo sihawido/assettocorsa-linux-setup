@@ -13,7 +13,7 @@ supported_dnf=("fedora" "nobara" "ultramarine")
 supported_arch=("arch" "endeavouros" "steamos")
 supported_opensuse=("opensuse-tumbleweed")
 ## Required native and flatpak packages
-req_packages=("wget" "tar" "unzip")
+req_packages=("wget" "tar" "unzip" "glib2")
 req_flatpaks=("com.github.Matoking.protontricks")
 
 # Setting paths
@@ -347,16 +347,22 @@ function InstallContentManager {
   done
   # Adding ability to open acmanager uri links
   if [[ -f "$AC_DESKTOP" ]]; then
+    mimelist="$HOME/.config/mimeapps.list"
     while :; do
-      mimelist="$HOME/.config/mimeapps.list" &&
       # Cleaning up previous modifications to mimeapps.list
-      sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop;||g" -i "$mimelist" &&
-      sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop||g" -i "$mimelist" &&
-      sed '$!N; /^\(.*\)\n\1$/!P; D' -i "$mimelist" &&
+      if [[ -f "$mimelist" ]]; then
+        while :; do
+          sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop;||g" -i "$mimelist" &&
+          sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop||g" -i "$mimelist" &&
+          sed '$!N; /^\(.*\)\n\1$/!P; D' -i "$mimelist" &&
+          break
+          Error "Could not clean up previous modifications to mimeapps.list"
+        done
+      fi
       # Adding acmanager to mimeapps.list
       echo "Adding ability to open acmanager links..." &&
-      gio mime x-scheme-handler/acmanager "Assetto Corsa.desktop" 1>& /dev/null &&
       sed "s|steam steam://rungameid/244210|$APPLAUNCH_AC|g" -i "$AC_DESKTOP" &&
+      gio mime x-scheme-handler/acmanager "Assetto Corsa.desktop" 1>& /dev/null &&
       break
       Error "Could not add acmanager to mimeapps.list"
     done
