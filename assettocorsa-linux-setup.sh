@@ -1,3 +1,5 @@
+#!/bin/bash
+# Preventing from running as root
 if [[ $USER == "root" ]]; then
   echo "Please do not run as root."
   exit 1
@@ -10,7 +12,7 @@ bold=$(tput bold); normal=$(tput sgr0)
 ## Supported distros
 supported_apt=("debian" "ubuntu" "linuxmint" "pop")
 supported_dnf=("fedora" "nobara" "ultramarine")
-supported_arch=("arch" "endeavouros" "steamos")
+supported_arch=("arch" "endeavouros" "steamos" "cachyos")
 supported_opensuse=("opensuse-tumbleweed")
 ## Required native and flatpak packages
 req_packages=("wget" "tar" "unzip" "glib2")
