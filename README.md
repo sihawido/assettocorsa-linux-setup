@@ -3,12 +3,9 @@ A shell script based on [this](https://steamcommunity.com/sharedfiles/filedetail
 
 ## What it does
 - Installs Proton-GE
-- Installs Content Manager
-- Installs fonts required for Content Manager
-- Creates a symlink required for Content Manager
-- Adds Content Manager to mimeapps.list (allows opening `acmanager` links)
-- Installs Custom Shaders Patch (CSP)
-- Installs fonts required by CSP
+- Installs Content Manager and everything else required for it to work
+- Adds Content Manager to mimeapps.list (allows opening `acmanager://` race invite links)
+- Installs Custom Shaders Patch (CSP) and everything else required for it to work
 - Installs DXVK
 
 After running the script you should be able to launch Assetto Corsa from Steam with no issues (it will launch Content Manager). The original launcher is preserved as `AssettoCorsa_original.exe`.
