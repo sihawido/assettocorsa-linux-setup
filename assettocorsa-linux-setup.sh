@@ -474,5 +474,5 @@ check_generated_files # Checking if assettocorsa's files were generated
 # Continuing to run functions
 CheckContentManager
 CheckCSP
-Ask "Install DXVK? (might result in better performance for AMD GPUs)" && DXVK
+Ask "Install DXVK? (fixes poor performance on some servers)" && DXVK
 echo "${bold}All done!${normal}"
