@@ -53,11 +53,15 @@ function get_release {
   echo "$(echo $os_release | sed "s/.* $1=//g" | sed "s/$1=\"//g" |  sed "s/ .*//g" | sed "s/\"//g")"
 }
 function CheckOS {
-  OS="$(get_release ID)"; OS_name="$(get_release NAME)"
-  if [[ ${supported_dnf[*]} =~ "$OS" ]]; then pm_install="dnf install"; pm_list="dnf list --installed"
-  elif [[ ${supported_apt[*]} =~ "$OS" ]]; then pm_install="apt install"; pm_list="apt list --installed"
-  elif [[ ${supported_arch[*]} =~ "$OS" ]]; then pm_install="pacman -S"; pm_list="pacman -Q"
-  elif [[ ${supported_opensuse[*]} =~ "$OS" ]]; then pm_install="zypper install"; pm_list="zypper search --installed-only"
+  OS="$(get_release ID)"; OS_like="$(get_release ID_LIKE)"; OS_name="$(get_release NAME)"
+  if [[ ${supported_dnf[*]} =~ "$OS" ]] || [[ ${supported_dnf[*]} =~ "$OS_like" ]]; then 
+    pm_install="dnf install"; pm_list="dnf list --installed"
+  elif [[ ${supported_apt[*]} =~ "$OS" ]] || [[ ${supported_apt[*]} =~ "$OS_like" ]]; then 
+    pm_install="apt install"; pm_list="apt list --installed"
+  elif [[ ${supported_arch[*]} =~ "$OS" ]] || [[ ${supported_arch[*]} =~ "$OS_like" ]]; then 
+    pm_install="pacman -S"; pm_list="pacman -Q"
+  elif [[ ${supported_opensuse[*]} =~ "$OS" ]] || [[ ${supported_opensuse[*]} =~ "$OS_like" ]]; then 
+    pm_install="zypper install"; pm_list="zypper search --installed-only"
   else
     echo "$OS_name is not currently supported. Please open an issue to support it."
     exit 1
