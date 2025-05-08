@@ -15,8 +15,8 @@ supported_dnf=("fedora" "nobara" "ultramarine")
 supported_arch=("arch" "endeavouros" "steamos" "cachyos")
 supported_opensuse=("opensuse-tumbleweed")
 ## Required native and flatpak packages
-req_packages=("wget" "tar" "unzip" "glib2")
-req_flatpaks=("com.github.Matoking.protontricks")
+req_packages=("wget" "tar" "unzip" "glib2" "protontricks")
+req_flatpaks=("")
 
 # Setting paths
 function set_paths_for {
@@ -419,44 +419,18 @@ function InstallCSP {
     break
     Error "CSP installation failed"
   done
-  # Checking if flatpak protorntricks doesn't have access to the steamlibrary
-  while :; do
-    IFS=";"
-    protontricks_fs=($(flatpak info --show-permissions com.github.Matoking.protontricks |
-    grep filesystems | sed 's|filesystems=||' | sed "s|~|$HOME|g"))
-    unset IFS; has_access="no"
-    for location in ${protontricks_fs[@]}; do
-      if [[ $STEAMAPPS == "$location"* ]]; then
-        has_access="yes"
-      fi
-    done
-    if [[ $has_access == "no" ]]; then
-      ask_for_protontricks_permission
-    fi
-    break
-  done
   # Installing fonts for CSP
   while :; do
     echo "Installing fonts required for CSP... (this might take a while)"
-    flatpak run com.github.Matoking.protontricks 244210 corefonts 1>& /dev/null &&
+    protontricks 244210 corefonts 1>& /dev/null &&
     return
     Error "Could not install corefonts for CSP"
-  done
-}
-function ask_for_protontricks_permission {
-  while :; do
-    command="sudo flatpak override com.github.Matoking.protontricks --filesystem="${STEAMAPPS%"/STEAMAPPS"}"" &&
-    echo "Flatpak version of protontricks might not have access to ${STEAMAPPS%"/STEAMAPPS"}." &&
-    echo "Running \"${bold}$command${normal}\"" &&
-    eval $command &&
-    break
-    Error "Could not acquire permissions for protontricks"
   done
 }
 
 function DXVK {
   echo "Installing DXVK..."
-  flatpak run com.github.Matoking.protontricks --no-background-wineserver 244210 dxvk 1>& /dev/null &&
+  protontricks --no-background-wineserver 244210 dxvk 1>& /dev/null &&
   return
   Error "Could not install DXVK"
 }
@@ -496,8 +470,7 @@ FindAC
 StartMenuShortcut
 CheckPrefix
 CheckProtonGE
-# Checking if assettocorsa's files were generated
-check_generated_files
+check_generated_files # Checking if assettocorsa's files were generated
 # Continuing to run functions
 CheckContentManager
 CheckCSP
