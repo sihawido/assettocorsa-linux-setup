@@ -2,11 +2,11 @@
 A shell script based on [this](https://steamcommunity.com/sharedfiles/filedetails/?id=2828364666) guide. Works on most modern systems.
 
 ## What it does
-- Installs Proton-GE
-- Installs Content Manager and everything else required for it to work
+- Installs [Proton-GE](https://github.com/GloriousEggroll/proton-ge-custom)
+- Installs [Content Manager](https://assettocorsa.club/content-manager.html) and everything else required for it to work
 - Adds Content Manager to mimeapps.list (allows opening `acmanager://` race invite links)
-- Installs Custom Shaders Patch (CSP) and everything else required for it to work
-- Installs DXVK
+- Installs [Custom Shaders Patch (CSP)](https://acstuff.club/patch/) and everything else required for it to work
+- Installs [DXVK](https://github.com/doitsujin/dxvk)
 
 After running the script you should be able to launch Assetto Corsa from Steam with no issues (it will launch Content Manager). The original launcher is preserved as `AssettoCorsa_original.exe`.
 
