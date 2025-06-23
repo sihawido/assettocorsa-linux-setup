@@ -428,6 +428,26 @@ function InstallCSP {
   done
 }
 
+function CheckCSPConfig {
+  cfg_file="$AC_COMMON/extension/config/data_alt_mapping.ini"
+  if [[ ! -f "$cfg_file" ]]; then
+    return
+  fi
+  cfg_contents="$(cat "$cfg_file")"
+  NAMES_WINE_section="$(echo "$cfg_contents" | grep "\[NAMES_WINE\]")"
+  if [[ "$NAMES_WINE_section" == "" ]]; then
+    return
+  fi
+  echo "Remove the '[NAMES_WINE]' section from 'data_alt_mapping.ini'?" &&
+  Ask "(Can resolve input mapping issues)" && FixCSPConfig
+}
+
+function FixCSPConfig {
+  sed '/\[NAMES_WINE\]/,$d' "$cfg_file" -i &&
+  return
+  Error "Failed to sed the '[NAMES_WINE]' section"
+}
+
 function DXVK {
   echo "Installing DXVK..."
   protontricks --no-background-wineserver 244210 dxvk 1>& /dev/null &&
@@ -474,5 +494,6 @@ check_generated_files # Checking if assettocorsa's files were generated
 # Continuing to run functions
 CheckContentManager
 CheckCSP
+CheckCSPConfig
 Ask "Install DXVK? (fixes poor performance on some servers)" && DXVK
 echo "${bold}All done!${normal}"
