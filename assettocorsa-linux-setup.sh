@@ -154,7 +154,7 @@ function FindAC {
       if [ -d "$AC_COMMON" ]; then
         echo "Found ${bold}$AC_COMMON${normal}."
         Ask "Is that the right installation?" &&
-        set_path_for assettocorsa "$AC_COMMON" &&
+        set_paths_for assettocorsa "$AC_COMMON" &&
         return
       fi
     done
