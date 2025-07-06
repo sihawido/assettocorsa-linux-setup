@@ -26,10 +26,12 @@ function set_paths_for {
     if [[ $2 == "native" ]]; then
       LOCAL="$HOME/.local"
       APPLAUNCH_AC="steam -applaunch 244210 %u"
+      STEAM_LIBRARY_VDF="${HOME}/.steam/steam/steamapps/libraryfolders.vdf"
     # Setting flatpak paths
     elif [[ $2 == "flatpak" ]]; then
       LOCAL="$HOME/.var/app/com.valvesoftware.Steam"
       APPLAUNCH_AC="flatpak run com.valvesoftware.Steam -applaunch 244210 %u"
+      STEAM_LIBRARY_VDF="$HOME/.var/app/com.valvesoftware.Steam/data/Steam/steamapps/libraryfolders.vdf"
     else
       Error "set_paths_for: '$1 $2' is not a valid option"
     fi
@@ -141,14 +143,27 @@ function CheckTempDir {
 }
 
 function FindAC {
-  if [ -d $AC_COMMON ]; then
-    echo "Found ${bold}$AC_COMMON${normal}."
-    Ask "Is that the right installation?" &&
-    set_paths_for assettocorsa "$AC_COMMON" &&
-    return
+  # Find installation
+  if [ -f "$STEAM_LIBRARY_VDF" ]; then  
+    # Extract Steam library paths
+    PATH_LIST=$(grep 'path' "$STEAM_LIBRARY_VDF" | awk -F'"' '{print $4}')
+
+    for LIBRARY_PATH in $PATH_LIST; do
+      AC_COMMON="${LIBRARY_PATH}/steamapps/common/assettocorsa"
+      
+      if [ -d "$AC_COMMON" ]; then
+        echo "Found ${bold}$AC_COMMON${normal}."
+        Ask "Is that the right installation?" &&
+        set_path_for assettocorsa "$AC_COMMON" &&
+        return
+      fi
+    done
   else
-    echo "Could not find Asseto Corsa in the default path."
+    echo "No steam library file found at: $STEAM_LIBRARY_VDF"
   fi
+  
+  echo "Could not find Assetto Corsa in the default path."
+
   while :; do
     echo "Enter path to ${bold}steamapps/common/assettocorsa${normal}:"
     read -i "$PWD/" -e AC_COMMON &&
