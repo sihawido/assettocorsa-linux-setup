@@ -277,27 +277,10 @@ function RemovePrefix {
 }
 
 function CheckProtonGE {
-  # Finding current ProtonGE version
-  declare -i current_ge_version=0
-  compat_tools=($(ls "$COMPAT_TOOLS_DIR/"))
-  for compat_tool in ${compat_tools[@]}; do
-    if [[ $compat_tool == "GE-Proton"* ]]; then
-      declare -i compat_tool_version=$(echo $compat_tool | sed 's/GE-Proton//g' | sed 's/-//g')
-      if (( $compat_tool_version > $current_ge_version )); then
-        declare -i current_GE_version=$compat_tool_version
-        current_GE="$(echo $compat_tool | sed 's/GE-Proton/ProtonGE/g')"
-      fi
-    fi
-  done
-  # Asking whether to install ProtonGE
   ProtonGE="ProtonGE $GE_version"
-  declare -i GE_tobeinstalled=$(echo $GE_version | sed 's|-||g')
-  if (( $GE_tobeinstalled == $current_GE_version )); then
+  echo "$ProtonGE is the latest tested version that works. Using any other version may not work."
+  if [[ -d "$COMPAT_TOOLS_DIR/GE-Proton$GE_version" ]]; then
     Ask "Reinstall $ProtonGE?" && InstallProtonGE
-  elif (( $GE_tobeinstalled > $current_GE_version )); then
-    Ask "$current_GE is already installed. Update to $ProtonGE?" && InstallProtonGE
-  elif (( $GE_tobeinstalled < $current_GE_version )); then
-    Ask "$current_GE is already installed. Downgrade to $ProtonGE?" && InstallProtonGE
   else
     Ask "Install $ProtonGE?" && InstallProtonGE
   fi
@@ -320,7 +303,7 @@ function InstallProtonGE {
 1. Restart Steam.
 2. Go to Assetto Corsa > Properties > Compatability.
 3. Turn on 'Force the use of a specific Steam Play compatability tool'.
-4. From the drop-down, select $ProtonGE.${normal}" &&
+4. From the drop-down, select $ProtonGE.${normal}." &&
   return
   Error "$ProtonGE installation failed"
 }
@@ -487,8 +470,8 @@ function Ask {
 
 function check_generated_files {
   if [ ! -d "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
-    echo "Please launch Assetto Corsa with Proton-GE to generate required files before proceeding.
-  It will take a while to launch since it's creating a Wineprefix and installing dependencies."
+    echo "Before proceeding, please launch Assetto Corsa with Proton-GE $GE_version to generate required files. Note that using Proton-GE versions other than v$GE_version may not work.
+It will take a while to launch since it's creating a Wineprefix and installing dependencies."
     exit 1
   fi
 }
@@ -505,7 +488,8 @@ FindAC
 StartMenuShortcut
 CheckPrefix
 CheckProtonGE
-check_generated_files # Checking if assettocorsa's files were generated
+# Checking if assettocorsa's files were generated
+check_generated_files
 # Continuing to run functions
 CheckContentManager
 CheckCSP
