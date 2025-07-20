@@ -300,10 +300,10 @@ function InstallProtonGE {
   cp -rfa "temp/GE-Proton$GE_version" "$COMPAT_TOOLS_DIR" &&
   rm -rf "temp/" &&
   echo "${bold}To enable ProtonGE for Assetto Corsa:
-1. Restart Steam.
-2. Go to Assetto Corsa > Properties > Compatability.
-3. Turn on 'Force the use of a specific Steam Play compatability tool'.
-4. From the drop-down, select $ProtonGE.${normal}." &&
+ 1. Restart Steam
+ 2. Go to Assetto Corsa > Properties > Compatability
+ 3. Turn on 'Force the use of a specific Steam Play compatability tool'
+ 4. From the drop-down, select $ProtonGE.${normal}" &&
   return
   Error "$ProtonGE installation failed"
 }
@@ -373,6 +373,7 @@ function InstallContentManager {
   else
     echo "Assetto Corsa does not have a .desktop shortcut, URI links to CM will not work."
   fi
+  echo "When starting Content Manager, set the root Assetto Corsa folder to ${bold}Z:/$AC_COMMON${normal}"
 }
 
 function CheckCSP {
@@ -436,8 +437,8 @@ function CheckCSPConfig {
   if [[ "$NAMES_WINE_section" == "" ]]; then
     return
   fi
-  echo "Remove the '[NAMES_WINE]' section from 'data_alt_mapping.ini'?" &&
-  Ask "(Can resolve input mapping issues)" && FixCSPConfig
+  echo "Resolve some input mapping issues?" &&
+  Ask "(Only do this step if you have issues mapping your inputs)" && FixCSPConfig
 }
 
 function FixCSPConfig {
@@ -462,16 +463,19 @@ function Ask {
   while true; do
     read -p "$* [y/n]: " yn
     case $yn in
-      [Yy]*) return 0 ;;
-      [Nn]*) echo "Skipping..." ; return 1 ;;
+      [Yy]*) echo; return 0 ;;
+      [Nn]*) echo; return 1 ;;
     esac
   done
 }
 
 function check_generated_files {
   if [ ! -d "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
-    echo "Before proceeding, please launch Assetto Corsa with Proton-GE $GE_version to generate required files. Note that using Proton-GE versions other than v$GE_version may not work.
-It will take a while to launch since it's creating a Wineprefix and installing dependencies."
+    echo "Before proceeding, please do the following to generate a Wineprefix:
+ 1. Launch Assetto Corsa with Proton-GE $GE_version
+ 2. Wait until Assetto Corsa launches (it takes a while)
+ 3. Exit Assetto Corsa
+Then start the script again and skip the steps relating to deleting the Wineprefix and installing ProtonGE."
     exit 1
   fi
 }
