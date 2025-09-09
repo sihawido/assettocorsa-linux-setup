@@ -373,7 +373,7 @@ function InstallContentManager {
   else
     echo "Assetto Corsa does not have a .desktop shortcut, URI links to CM will not work."
   fi
-  echo "When starting Content Manager, set the root Assetto Corsa folder to ${bold}Z:/$AC_COMMON${normal}"
+  echo "When starting Content Manager, set the root Assetto Corsa folder to ${bold}Z:$AC_COMMON${normal}"
 }
 
 function CheckCSP {
@@ -460,11 +460,12 @@ function Error {
   exit 1
 }
 function Ask {
+  echo
   while true; do
     read -p "$* [y/n]: " yn
     case $yn in
-      [Yy]*) echo; return 0 ;;
-      [Nn]*) echo; return 1 ;;
+      [Yy]*) return 0 ;;
+      [Nn]*) return 1 ;;
     esac
   done
 }
@@ -497,6 +498,6 @@ check_generated_files
 # Continuing to run functions
 CheckContentManager
 CheckCSP
+Ask "Install DXVK? (can fix poor performance on some servers)" && DXVK
 CheckCSPConfig
-Ask "Install DXVK? (fixes poor performance on some servers)" && DXVK
 echo "${bold}All done!${normal}"
