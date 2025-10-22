@@ -356,16 +356,16 @@ function install-content-manager {
 # Checking if CSP is installed
 function check-csp {
   # Getting CSP version
+  current_CSP_version=""
   data_manifest_file="$AC_COMMON/extension/config/data_manifest.ini"
   if [[ -f "$data_manifest_file" ]]; then
     current_CSP_version="$(cat "$data_manifest_file" | grep "SHADERS_PATCH=" | sed 's/SHADERS_PATCH=//g')"
   fi
+  # Asking
   if [[ $current_CSP_version == "" ]]; then
     string="Install CSP (Custom Shaders Patch) v$CSP_version?"
   elif [[ $current_CSP_version == "$CSP_version" ]]; then
     string="Reinstall CSP v$CSP_version?"
-  else
-    string="CSP v$current_CSP_version is already installed. Install CSP v$CSP_version instead?"
   fi
   if ask "$string"; then
     install-csp
