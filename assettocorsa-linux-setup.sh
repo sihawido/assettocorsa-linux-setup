@@ -48,6 +48,7 @@ supported_apt=("debian" "ubuntu" "linuxmint" "pop")
 supported_dnf=("fedora" "nobara" "ultramarine")
 supported_arch=("arch" "endeavouros" "steamos" "cachyos")
 supported_opensuse=("opensuse-tumbleweed")
+supported_slackware=("slackware" "salix")
 # Required packages
 req_packages=("wget" "tar" "unzip" "glib2" "protontricks")
 
@@ -64,7 +65,9 @@ elif [[ ${supported_apt[*]} =~ "$OS" ]] || [[ ${supported_apt[*]} =~ "$OS_like" 
 elif [[ ${supported_arch[*]} =~ "$OS" ]] || [[ ${supported_arch[*]} =~ "$OS_like" ]]; then 
   pm_install="pacman -S"; pm_list="pacman -Q"
 elif [[ ${supported_opensuse[*]} =~ "$OS" ]] || [[ ${supported_opensuse[*]} =~ "$OS_like" ]]; then 
-  pm_install="zypper install"; pm_list="zypper search --installed-only"
+    pm_install="zypper install"; pm_list="zypper search --installed-only"
+elif [[ ${supported_slackware[*]} =~ "$OS" ]] || [[ ${supported_slackware[*]} =~ "$OS_like" ]]; then 
+  pm_install="slackpkg install or sboinstall"; pm_list="ls /var/lib/pkgtools"
 else
   echo "$OS_name is not currently supported. You can open an issue on Github (https://github.com/sihawido/assettocorsa-linux-setup/issues) with your system details to add it as supported."
   exit 1
