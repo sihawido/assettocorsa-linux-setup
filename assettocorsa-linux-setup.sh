@@ -48,8 +48,7 @@ supported_apt=("debian" "ubuntu" "linuxmint" "pop")
 supported_dnf=("fedora" "nobara" "ultramarine")
 supported_arch=("arch" "endeavouros" "steamos" "cachyos")
 supported_opensuse=("opensuse-tumbleweed")
-# Required packages
-req_packages=("wget" "tar" "unzip" "glib2" "protontricks")
+supported_slackware=("slackware" "salix")
 
 # Checking distro compatability
 function get_release {
@@ -58,20 +57,29 @@ function get_release {
 }
 OS="$(get_release ID)"; OS_like="$(get_release ID_LIKE)"; OS_name="$(get_release NAME)"
 if [[ ${supported_dnf[*]} =~ "$OS" ]] || [[ ${supported_dnf[*]} =~ "$OS_like" ]]; then 
-  pm_install="dnf install"; pm_list="dnf list --installed"
+  pm_install="dnf install"; pm_list=$(dnf list --installed)
 elif [[ ${supported_apt[*]} =~ "$OS" ]] || [[ ${supported_apt[*]} =~ "$OS_like" ]]; then 
-  pm_install="apt install"; pm_list="apt list --installed"
+  pm_install="apt install"; pm_list=$(apt list --installed)
 elif [[ ${supported_arch[*]} =~ "$OS" ]] || [[ ${supported_arch[*]} =~ "$OS_like" ]]; then 
-  pm_install="pacman -S"; pm_list="pacman -Q"
+  pm_install="pacman -S"; pm_list=$(pacman -Q)
 elif [[ ${supported_opensuse[*]} =~ "$OS" ]] || [[ ${supported_opensuse[*]} =~ "$OS_like" ]]; then 
-  pm_install="zypper install"; pm_list="zypper search --installed-only"
+    pm_install="zypper install"; pm_list=$(zypper search --installed-only)
+elif [[ ${supported_slackware[*]} =~ "$OS" ]] || [[ ${supported_slackware[*]} =~ "$OS_like" ]]; then 
+  pm_install="slackpkg install or sboinstall"; pm_list=$(ls /var/lib/pkgtools/packages | sed 's/-[^-]*-[^-]*-[^-]*$//')
 else
   echo "$OS_name is not currently supported. You can open an issue on Github (https://github.com/sihawido/assettocorsa-linux-setup/issues) with your system details to add it as supported."
   exit 1
 fi
 
+# Required packages
+if [[ "$OS" == "slackware" ]] || [[ "$OS" == "salix" ]] || [[ "$OS_like" == "slackware" ]]; then
+    req_packages=("wget" "tar" "infozip" "glib2" "protontricks")
+else
+    req_packages=("wget" "tar" "unzip" "glib2" "protontricks")
+fi
+
 # Checking if required packages are installed
-installed_packages=($($pm_list))
+installed_packages=($pm_list)
 for package in ${req_packages[@]}; do
   if [[ ${installed_packages[@]} != *$package* ]]; then
     echo "$package is not installed, run ${bold}sudo $pm_install $package${reset} to install."
