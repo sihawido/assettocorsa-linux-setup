@@ -170,7 +170,7 @@ function ac-path-prompt {
   while :; do
     read -ei "$PWD/" path &&
     # Converting '~/directory/' to '/home/user/directory'
-    path="$(echo "${path%"/"}" | sed "s|\~\/|$HOME\/|g")"
+    local path="$(echo "${path%"/"}" | sed "s|\~\/|$HOME\/|g")"
     if [[ -d "$path" ]] && [[ $(basename "$path") == "assettocorsa" ]]; then
       AC_COMMON="$path"
       break
@@ -181,7 +181,7 @@ function ac-path-prompt {
   done
 }
 # Getting path from libraryfolders.vdf config
-if [ -f "$STEAM_LIBRARY_VDF" ]; then  
+if [ -f "$STEAM_LIBRARY_VDF" ]; then
   # Getting from Steam library paths
   path_list=$(grep 'path' "$STEAM_LIBRARY_VDF" | awk -F'"' '{print $4}')
   for path in $path_list; do
@@ -223,11 +223,11 @@ fi
 
 # Asking whether to delete start menu shortcut which might cause content manager to crash
 function check-start-menu-shortcut {
-  link_file="$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk"
+  local link_file="$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk"
   if [[ -f "$link_file" ]]; then
     echo "Start Menu Shortcut for Content Manager found. This might be causing crashes on start-up."
     if ask "Delete the shortcut?"; then
-      subprocess rm "$link_file" 
+      subprocess rm "$link_file"
     fi
   else
     return 1
@@ -235,12 +235,12 @@ function check-start-menu-shortcut {
 }
 # Checking if ProtonGE is installed
 function check-proton {
-  ProtonGE="ProtonGE $GE_version"
+  local ProtonGE="ProtonGE $GE_version"
   echo "$ProtonGE is the latest tested version that works. Using any other version may not work."
   if [[ -d "$COMPAT_TOOLS_DIR/GE-Proton$GE_version" ]]; then
-    string="Reinstall $ProtonGE?"
+    local string="Reinstall $ProtonGE?"
   else
-    string="Install $ProtonGE?"
+    local string="Install $ProtonGE?"
   fi
   if ask "$string"; then
     install-proton
@@ -289,8 +289,8 @@ function delete-wineprefix {
     fi
   fi
   # Saving configs
-  ac_config_dir="$AC_COMPATDATA/pfx/drive_c/users/steamuser/Documents/Assetto Corsa"
-  cm_config_dir="$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager"
+  local ac_config_dir="$AC_COMPATDATA/pfx/drive_c/users/steamuser/Documents/Assetto Corsa"
+  local cm_config_dir="$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager"
   subprocess mkdir "ac_configs/"
   if [[ -d "$ac_config_dir" ]]; then
     echo "Saving AC configs and presets..."
@@ -306,7 +306,7 @@ function delete-wineprefix {
     subprocess rm -rf "$AC_COMPATDATA"
   fi
   # Copying back the saved configs
-  declare -i copied=0
+  local -i copied=0
   if [[ -d "ac_configs/Assetto Corsa" ]]; then
     echo "Copying saved AC configs and presets..."
     subprocess mkdir -p "$AC_COMPATDATA/pfx/drive_c/users/steamuser/Documents"
@@ -324,8 +324,8 @@ function delete-wineprefix {
     subprocess rm -r "ac_configs/"
   fi
   # Deleting Content Manager
-  ac_exe="$AC_COMMON/AssettoCorsa.exe"
-  ac_original_exe="$AC_COMMON/AssettoCorsa_original.exe"
+  local ac_exe="$AC_COMMON/AssettoCorsa.exe"
+  local ac_original_exe="$AC_COMMON/AssettoCorsa_original.exe"
   if [[ -f "$ac_original_exe" ]]; then
     echo "Deleting Content Manager..."
     subprocess rm "$ac_exe"
@@ -335,9 +335,9 @@ function delete-wineprefix {
 # Checking if Content Manager is installed
 function check-content-manager {
   if [[ -f "$AC_COMMON/AssettoCorsa_original.exe" ]]; then
-    string="Reinstall Content Manager?"
+    local string="Reinstall Content Manager?"
   else
-    string="Install Content Manager?"
+    local string="Install Content Manager?"
   fi
   if ask "$string"; then
     install-content-manager
@@ -364,8 +364,8 @@ function install-content-manager {
   subprocess rm -rf "temp/"
   # Creating symlink
   echo "Creating symlink..."
-  link_from="$STEAM_DIR/config/loginusers.vdf"
-  link_to="$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
+  local link_from="$STEAM_DIR/config/loginusers.vdf"
+  local link_to="$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
   subprocess ln -sf "$link_from" "$link_to"
   # Adding ability to open acmanager uri links
   if [[ -f "$AC_DESKTOP" ]]; then
@@ -389,16 +389,16 @@ function install-content-manager {
 # Checking if CSP is installed
 function check-csp {
   # Getting CSP version
-  current_CSP_version=""
-  data_manifest_file="$AC_COMMON/extension/config/data_manifest.ini"
+  local current_CSP_version=""
+  local data_manifest_file="$AC_COMMON/extension/config/data_manifest.ini"
   if [[ -f "$data_manifest_file" ]]; then
     current_CSP_version="$(cat "$data_manifest_file" | grep "SHADERS_PATCH=" | sed 's/SHADERS_PATCH=//g')"
   fi
   # Asking
   if [[ $current_CSP_version == "" ]]; then
-    string="Install CSP (Custom Shaders Patch) v$CSP_version?"
+    local string="Install CSP (Custom Shaders Patch) v$CSP_version?"
   elif [[ $current_CSP_version == "$CSP_version" ]]; then
-    string="Reinstall CSP v$CSP_version?"
+    local string="Reinstall CSP v$CSP_version?"
   fi
   if ask "$string"; then
     install-csp
@@ -406,7 +406,7 @@ function check-csp {
 }
 function install-csp {
   # Adding dwrite dll override
-  reg_dwrite="$(echo "$(cat "$AC_COMPATDATA/pfx/user.reg")" | grep "dwrite")"
+  local reg_dwrite="$(echo "$(cat "$AC_COMPATDATA/pfx/user.reg")" | grep "dwrite")"
   if [[ $reg_dwrite == "" ]]; then
     echo "Adding DLL override 'dwrite'..."
     subprocess sed '/\"\*d3d11"="native\"/a \"dwrite"="native,builtin\"' "$AC_COMPATDATA/pfx/user.reg" -i
@@ -429,12 +429,12 @@ function install-csp {
 }
 
 function check-csp-config {
-  cfg_file="$AC_COMMON/extension/config/data_alt_mapping.ini"
+  local cfg_file="$AC_COMMON/extension/config/data_alt_mapping.ini"
   if [[ ! -f "$cfg_file" ]]; then
     return
   fi
-  cfg_contents="$(cat "$cfg_file")"
-  NAMES_WINE_section="$(echo "$cfg_contents" | grep "\[NAMES_WINE\]")"
+  local cfg_contents="$(cat "$cfg_file")"
+  local NAMES_WINE_section="$(echo "$cfg_contents" | grep "\[NAMES_WINE\]")"
   if [[ "$NAMES_WINE_section" == "" ]]; then
     return
   fi
