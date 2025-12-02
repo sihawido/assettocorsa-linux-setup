@@ -1,11 +1,13 @@
 #! /usr/bin/env bash
-set -uo nounset # Checks for unbound variables
+set -u # Checks for unbound variables
 # Checking for errors before executing
 bash -n "$0"
-status=$?
-if [[ $status != "0" ]]; then
-  exit $status
+status="$?"
+if [[ "$status" != "0" ]]; then
+  exit "$status"
 fi
+# Enables usage of aliases inside script
+shopt -s expand_aliases
 
 # Preventing from running as root
 if [[ $USER == "root" ]]; then
@@ -16,7 +18,10 @@ fi
 # Versions
 GE_version="9-20"; CSP_version="0.2.11"
 # Defining text styles for readablity
-bold=$(echo -e "\033[1m"); reset=$(echo -e "\033[0m"); error=$(echo -e "${bold}\033[31m"); warning=$(echo -e "\033[33m")
+bold=$(echo -e "\033[1m")
+reset=$(echo -e "\033[0m")
+error=$(echo -e "${bold}\033[31m")
+warning=$(echo -e "\033[33m")
 
 # Internal functions
 function ask {
@@ -42,6 +47,25 @@ ${warning}If this is an issue, please report it on Github.${reset}
     exit 1
   fi
 }
+function get-exec {
+  local cmd="$1"
+  if ! declare -p BASH_ALIASES > /dev/null; then
+    declare -A BASH_ALIASES=()
+  fi
+  local cmd_alias="${BASH_ALIASES[$1]-}"
+  local cmd_which="$(which $cmd 2> /dev/null)"
+  local cmd_which_status="$?"
+  if [[ "$cmd_alias" != "" ]]; then
+    echo "$cmd_alias"
+  elif [[ "$cmd_which_status" == "0" ]] && [[ "$cmd_which" != ""  ]]; then
+    echo "$cmd_which"
+  else
+    return 1
+  fi
+}
+
+# Required packages
+required_packages=("wget" "tar" "unzip" "gio" "protontricks")
 
 # Supported distros
 supported_apt=("debian" "ubuntu" "linuxmint" "pop")
@@ -51,37 +75,38 @@ supported_opensuse=("opensuse-tumbleweed")
 supported_slackware=("slackware" "salix")
 
 # Checking distro compatability
+OS_RELEASE="$(cat /etc/os-release)"
 function get_release {
-  os_release="$(cat /etc/os-release)"
-  echo "$(echo $os_release | sed "s/.* $1=//g" | sed "s/$1=\"//g" |  sed "s/ .*//g" | sed "s/\"//g")"
+  local is_present="$(echo $OS_RELEASE | grep $1 > /dev/null; echo $?)"
+  if [[ "$is_present" != "0" ]]; then
+    return
+  fi
+  echo "$(echo $OS_RELEASE | sed "s/.* $1=//g" | sed "s/$1=\"//g" |  sed "s/ .*//g" | sed "s/\"//g")"
 }
-OS="$(get_release ID)"; OS_like="$(get_release ID_LIKE)"; OS_name="$(get_release NAME)"
-if [[ ${supported_dnf[*]} =~ "$OS" ]] || [[ ${supported_dnf[*]} =~ "$OS_like" ]]; then 
-  pm_install="dnf install"; pm_list=$(dnf list --installed)
-elif [[ ${supported_apt[*]} =~ "$OS" ]] || [[ ${supported_apt[*]} =~ "$OS_like" ]]; then 
-  pm_install="apt install"; pm_list=$(apt list --installed)
-elif [[ ${supported_arch[*]} =~ "$OS" ]] || [[ ${supported_arch[*]} =~ "$OS_like" ]]; then 
-  pm_install="pacman -S"; pm_list=$(pacman -Q)
-elif [[ ${supported_opensuse[*]} =~ "$OS" ]] || [[ ${supported_opensuse[*]} =~ "$OS_like" ]]; then 
-    pm_install="zypper install"; pm_list=$(zypper search --installed-only)
-elif [[ ${supported_slackware[*]} =~ "$OS" ]] || [[ ${supported_slackware[*]} =~ "$OS_like" ]]; then 
-  pm_install="slackpkg install or sboinstall"; pm_list=$(ls /var/lib/pkgtools/packages | sed 's/-[^-]*-[^-]*-[^-]*$//')
+OS_ID="$(get_release ID)"
+OS_LIKE="$(get_release ID_LIKE)"
+OS_NAME="$(get_release NAME)"
+if [[ ${supported_dnf[*]} =~ "$OS_ID" ]] || [[ ${supported_dnf[*]} =~ "$OS_LIKE" ]]; then
+  pm_install="dnf install"
+elif [[ ${supported_apt[*]} =~ "$OS_ID" ]] || [[ ${supported_apt[*]} =~ "$OS_LIKE" ]]; then
+  pm_install="apt install"
+elif [[ ${supported_arch[*]} =~ "$OS_ID" ]] || [[ ${supported_arch[*]} =~ "$OS_LIKE" ]]; then
+  pm_install="pacman -S"
+elif [[ ${supported_opensuse[*]} =~ "$OS_ID" ]] || [[ ${supported_opensuse[*]} =~ "$OS_LIKE" ]]; then
+  pm_install="zypper install"
+elif [[ ${supported_slackware[*]} =~ "$OS_ID" ]] || [[ ${supported_slackware[*]} =~ "$OS_LIKE" ]]; then
+  pm_install="slackpkg install or sboinstall"
+  required_packages=("wget" "tar" "infozip" "glib2" "protontricks")
 else
-  echo "$OS_name is not currently supported. You can open an issue on Github (https://github.com/sihawido/assettocorsa-linux-setup/issues) with your system details to add it as supported."
+  echo "\
+$OS_NAME is not currently supported.
+You can open an issue on Github (https://github.com/sihawido/assettocorsa-linux-setup/issues) with your system details to add it as supported."
   exit 1
 fi
 
-# Required packages
-if [[ "$OS" == "slackware" ]] || [[ "$OS" == "salix" ]] || [[ "$OS_like" == "slackware" ]]; then
-    req_packages=("wget" "tar" "infozip" "glib2" "protontricks")
-else
-    req_packages=("wget" "tar" "unzip" "glib2" "protontricks")
-fi
-
 # Checking if required packages are installed
-installed_packages=($pm_list)
-for package in ${req_packages[@]}; do
-  if [[ ${installed_packages[@]} != *$package* ]]; then
+for package in ${required_packages[@]}; do
+  if ! get-exec "$package" > /dev/null; then
     echo "$package is not installed, run ${bold}sudo $pm_install $package${reset} to install."
     exit 1
   fi
@@ -432,10 +457,10 @@ function install-dxvk {
   subprocess protontricks --no-background-wineserver 244210 dxvk
 }
 
-# Helper functions
 function check-generated-files {
   if [ ! -d "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
-    echo "${bold}Before proceeding, please do the following to generate the wineprefix:
+    echo "\
+${bold}Before proceeding, please do the following to generate the wineprefix:
  1. Launch Assetto Corsa with Proton-GE $GE_version
  2. Wait until Assetto Corsa launches (it takes a while)
  3. Exit Assetto Corsa
