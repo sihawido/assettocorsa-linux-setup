@@ -124,6 +124,13 @@ fi
 
 # Getting steam installation path
 NATIVE_STEAM_DIR="$HOME/.local/share/Steam"
+if [[ ! -d "$NATIVE_STEAM_DIR" ]]; then
+  out="$(readlink "$HOME/.steam/root")"
+  status="$?"
+  if [[ "$status" == "0" ]]; then
+    NATIVE_STEAM_DIR="$out"
+  fi
+fi
 FLATPAK_STEAM_DIR="$HOME/.var/app/com.valvesoftware.Steam/data/Steam"
 STEAM_INSTALL="?"
 if [[ -d "$NATIVE_STEAM_DIR" ]] && [[ -d "$FLATPAK_STEAM_DIR" ]]; then
@@ -146,14 +153,14 @@ else
   exit 1
 fi
 
-if [[ $STEAM_INSTALL == "native" ]]; then
+if [[ "$STEAM_INSTALL" == "native" ]]; then
   STEAM_DIR="$NATIVE_STEAM_DIR"
   APPLAUNCH_AC="steam -applaunch 244210 %u"
-elif [[ $STEAM_INSTALL == "flatpak" ]]; then
+elif [[ "$STEAM_INSTALL" == "flatpak" ]]; then
   STEAM_DIR="$FLATPAK_STEAM_DIR"
   APPLAUNCH_AC="flatpak run com.valvesoftware.Steam -applaunch 244210 %u"
 else
-  echo "Not a valid Steam installation."
+  echo "Invalid STEAM_INSTALL '$STEAM_INSTALL'"
   exit 1
 fi
 
@@ -395,10 +402,10 @@ function check-csp {
     current_CSP_version="$(cat "$data_manifest_file" | grep "SHADERS_PATCH=" | sed 's/SHADERS_PATCH=//g')"
   fi
   # Asking
-  if [[ $current_CSP_version == "" ]]; then
-    local string="Install CSP (Custom Shaders Patch) v$CSP_version?"
-  elif [[ $current_CSP_version == "$CSP_version" ]]; then
+  if [[ $current_CSP_version == "$CSP_version" ]]; then
     local string="Reinstall CSP v$CSP_version?"
+  else
+    local string="Install CSP (Custom Shaders Patch) v$CSP_version?"
   fi
   if ask "$string"; then
     install-csp
