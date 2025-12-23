@@ -77,11 +77,12 @@ supported_slackware=("slackware" "salix")
 # Checking distro compatability
 OS_RELEASE="$(cat /etc/os-release)"
 function get_release {
-  local is_present="$(echo $OS_RELEASE | grep $1 > /dev/null; echo $?)"
-  if [[ "$is_present" != "0" ]]; then
-    return
+  local string
+  string="$(echo $OS_RELEASE | sed "s/.* $1=//g" | sed "s/$1=\"//g" |  sed "s/ .*//g" | sed "s/\"//g")"
+  if [[ string == "" ]]; then
+    return 1
   fi
-  echo "$(echo $OS_RELEASE | sed "s/.* $1=//g" | sed "s/$1=\"//g" |  sed "s/ .*//g" | sed "s/\"//g")"
+  echo "$string"
 }
 OS_ID="$(get_release ID)"
 OS_LIKE="$(get_release ID_LIKE)"
