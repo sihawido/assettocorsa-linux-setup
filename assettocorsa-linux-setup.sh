@@ -84,7 +84,7 @@ function is-set {
 }
 
 # Required packages
-required_packages=("wget" "tar" "unzip" "gio" "protontricks")
+required_packages=("wget" "tar" "unzip" "glib2" "protontricks")
 
 # Supported distros
 supported_apt=("debian" "ubuntu" "linuxmint" "pop")
@@ -92,6 +92,7 @@ supported_dnf=("fedora" "nobara" "ultramarine")
 supported_arch=("arch" "endeavouros" "steamos" "cachyos")
 supported_opensuse=("opensuse-tumbleweed")
 supported_slackware=("slackware" "salix")
+supported_gentoo=("gentoo")
 
 # Checking distro compatability
 source "/etc/os-release"
@@ -111,6 +112,9 @@ elif [[ ${supported_opensuse[*]} =~ "$ID" ]] || [[ ${supported_opensuse[*]} =~ "
 elif [[ ${supported_slackware[*]} =~ "$ID" ]] || [[ ${supported_slackware[*]} =~ "$ID_LIKE" ]]; then
   pm_install="slackpkg install or sboinstall"
   required_packages=("wget" "tar" "infozip" "glib2" "protontricks")
+elif [[ ${supported_gentoo[*]} =~ "$ID" ]] || [[ ${supported_gentoo[*]} =~ "$ID_LIKE" ]]; then
+  required_packages=("net-misc/wget" "app-arch/tar" "app-arch/unzip" "dev-libs/glib2" "app-emulation/protontricks")
+  pm_install="emerge"
 else
   echo "\
 $NAME is not currently supported.
@@ -119,9 +123,13 @@ You can open an issue on Github (https://github.com/sihawido/assettocorsa-linux-
 fi
 
 # Checking if required packages are installed
-for package in ${required_packages[@]}; do
-  if ! get-exec "$package" > /dev/null; then
-    echo "$package is not installed, run ${bold}sudo $pm_install $package${reset} to install."
+for package in "${required_packages[@]}"; do
+  bin="$(basename "$package")"
+  if [[ "$bin" == "glib2" ]]; then
+    bin="gio"
+  fi
+  if ! get-exec "$bin" > /dev/null; then
+    echo "$bin is not installed, run ${bold}sudo $pm_install $package${reset} to install."
     exit 1
   fi
 done
