@@ -93,6 +93,7 @@ supported_arch=("arch" "endeavouros" "steamos" "cachyos")
 supported_opensuse=("opensuse-tumbleweed")
 supported_slackware=("slackware" "salix")
 supported_gentoo=("gentoo")
+supported_void=("void")
 
 # Checking distro compatability
 source "/etc/os-release"
@@ -115,6 +116,9 @@ elif [[ ${supported_slackware[*]} =~ "$ID" ]] || [[ ${supported_slackware[*]} =~
 elif [[ ${supported_gentoo[*]} =~ "$ID" ]] || [[ ${supported_gentoo[*]} =~ "$ID_LIKE" ]]; then
   required_packages=("net-misc/wget" "app-arch/tar" "app-arch/unzip" "dev-libs/glib2" "app-emulation/protontricks")
   pm_install="emerge"
+elif [[ ${supported_void[*]} =~ "$ID" ]] || [[ ${supported_void[*]} =~ "$ID_LIKE" ]]; then
+  required_packages=("wget", "tar", "unzip", "glib-2", "protontricks")
+  pm_install="xbps-install -S"
 else
   echo "\
 $NAME is not currently supported.
