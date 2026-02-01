@@ -6,7 +6,6 @@ A shell script based on [this](https://steamcommunity.com/sharedfiles/filedetail
 - Installs [Content Manager](https://assettocorsa.club/content-manager.html) and everything else required for it to work
 - Adds Content Manager to mimeapps.list (allows opening `acmanager://` race invite links)
 - Installs [Custom Shaders Patch (CSP)](https://acstuff.club/patch/) and everything else required for it to work
-- Installs [DXVK](https://github.com/doitsujin/dxvk)
 
 After running the script you should be able to launch Assetto Corsa from Steam with no issues (it will launch Content Manager). The original launcher is preserved as `AssettoCorsa_original.exe`.
 
@@ -14,7 +13,9 @@ After running the script you should be able to launch Assetto Corsa from Steam w
 1. Download Assetto Corsa on Steam.
 2. Inside the terminal, run
   ```
-  curl -Os https://raw.githubusercontent.com/sihawido/assettocorsa-linux-setup/main/assettocorsa-linux-setup.sh && bash assettocorsa-linux-setup.sh
+  curl -Os https://raw.githubusercontent.com/daringly-idealism/assettocorsa-linux-setup/main/assettocorsa-linux-setup.sh
+  nix-shell -p wget gnutar unzip glib protontricks
+  ./assettocorsa-linux-setup.sh
   ```
 > **Warning**: Always be careful when running scripts from the internet.
 3. Follow every step in the console (y - stands for yes, n - stands for no).

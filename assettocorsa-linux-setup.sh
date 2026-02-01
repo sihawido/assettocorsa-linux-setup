@@ -84,56 +84,20 @@ function is-set {
 }
 
 # Required packages
-required_packages=("wget" "tar" "unzip" "glib2" "protontricks")
-
-# Supported distros
-supported_apt=("debian" "ubuntu" "linuxmint" "pop")
-supported_dnf=("fedora" "nobara" "ultramarine")
-supported_arch=("arch" "endeavouros" "steamos" "cachyos")
-supported_opensuse=("opensuse-tumbleweed")
-supported_slackware=("slackware" "salix")
-supported_gentoo=("gentoo")
-supported_void=("void")
-
-# Checking distro compatability
-source "/etc/os-release"
-subprocess is-set "ID"
-subprocess is-set "NAME"
-if ! is-set "ID_LIKE"; then
-  ID_LIKE="undefined"
-fi
-if [[ ${supported_dnf[*]} =~ "$ID" ]] || [[ ${supported_dnf[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="dnf install"
-elif [[ ${supported_apt[*]} =~ "$ID" ]] || [[ ${supported_apt[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="apt install"
-elif [[ ${supported_arch[*]} =~ "$ID" ]] || [[ ${supported_arch[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="pacman -S"
-elif [[ ${supported_opensuse[*]} =~ "$ID" ]] || [[ ${supported_opensuse[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="zypper install"
-elif [[ ${supported_slackware[*]} =~ "$ID" ]] || [[ ${supported_slackware[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="slackpkg install or sboinstall"
-  required_packages=("wget" "tar" "infozip" "glib2" "protontricks")
-elif [[ ${supported_gentoo[*]} =~ "$ID" ]] || [[ ${supported_gentoo[*]} =~ "$ID_LIKE" ]]; then
-  required_packages=("net-misc/wget" "app-arch/tar" "app-arch/unzip" "dev-libs/glib2" "app-emulation/protontricks")
-  pm_install="emerge"
-elif [[ ${supported_void[*]} =~ "$ID" ]] || [[ ${supported_void[*]} =~ "$ID_LIKE" ]]; then
-  required_packages=("wget", "tar", "unzip", "glib-2", "protontricks")
-  pm_install="xbps-install -S"
-else
-  echo "\
-$NAME is not currently supported.
-You can open an issue on Github (https://github.com/sihawido/assettocorsa-linux-setup/issues) with your system details to add it as supported."
-  exit 1
-fi
+required_packages=("wget" "gnutar" "unzip" "glib" "protontricks")
+pm_install="nix-shell -p"
 
 # Checking if required packages are installed
 for package in "${required_packages[@]}"; do
   bin="$(basename "$package")"
-  if [[ "$bin" == "glib2" ]]; then
+  if [[ "$bin" == "glib" ]]; then
     bin="gio"
   fi
+  if [[ "$bin" == "gnutar" ]]; then
+    bin="tar"
+  fi
   if ! get-exec "$bin" > /dev/null; then
-    echo "$bin is not installed, run ${bold}sudo $pm_install $package${reset} to install."
+    echo "$bin is not installed, run ${bold}$pm_install ${required_packages[*]}${reset} to install."
     exit 1
   fi
 done
@@ -480,16 +444,6 @@ function fix-csp-config {
   subprocess sed '/\[NAMES_WINE\]/,$d' "$cfg_file" -i
 }
 
-function check-dxvk {
-  if ask "Install DXVK? (can improve performance in some cases)"; then
-    install-dxvk
-  fi
-}
-function install-dxvk {
-  echo "Installing DXVK..."
-  subprocess protontricks --no-background-wineserver 244210 dxvk
-}
-
 function check-generated-files {
   if [ ! -d "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
     echo "\
@@ -512,7 +466,6 @@ OPTIONAL_STEPS=(
   check-content-manager
   check-csp
   check-csp-config
-  check-dxvk
 )
 echo
 for func in "${OPTIONAL_STEPS[@]}"; do
