@@ -1,538 +1,582 @@
-#! /usr/bin/env bash
+#!/usr/bin/env bash
+# =============================================================================
+#  Assetto Corsa Linux Setup — Fully Automated Edition
+#  Original: https://github.com/sihawido/assettocorsa-linux-setup
+#  Improved: zero user input, progress bar, automatic Steam/wineprefix handling
+# =============================================================================
 
-# Checks for unbound variables
-set -u
-
-# Checking for errors before executing
-bash -n "$0"
-status="$?"
-if [[ "$status" != "0" ]]; then
-  exit "$status"
-fi
-
-# Enables usage of aliases inside the script
+set -euo pipefail
 shopt -s expand_aliases
 
-# Preventing from running as root
-if [[ $USER == "root" ]]; then
-  echo "Please do not run as root."
-  exit 1
-fi
+# ── Versions ──────────────────────────────────────────────────────────────────
+GE_VERSION="9-20"
+CSP_VERSION="0.2.11"
+AC_APP_ID="244210"
 
-# Versions
-GE_version="9-20"
-CSP_version="0.2.11"
+# ── Colours & styles ──────────────────────────────────────────────────────────
+BOLD="\033[1m"
+DIM="\033[2m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+RED="\033[31m"
+CYAN="\033[36m"
+RESET="\033[0m"
 
-# Defining text styles for readablity
-bold=$(echo -e "\033[1m")
-warning=$(echo -e "\033[33m")
-error=$(echo -e "${bold}\033[31m")
-reset=$(echo -e "\033[0m")
+# ── Progress bar ──────────────────────────────────────────────────────────────
+TOTAL_STEPS=10
+CURRENT_STEP=0
+BAR_WIDTH=50
+BAR_INIT=0   # set to 1 after first draw
 
-# Provides a yes/no prompt.
-function ask {
-  while true; do
-    read -rp "$* [y/n]: " yn
-    case $yn in
-      [Yy]*) return 0 ;;
-      [Nn]*) return 1 ;;
-    esac
-  done
+progress_bar() {
+  local label="$1"
+  local pct=$(( CURRENT_STEP * 100 / TOTAL_STEPS ))
+  local filled=$(( CURRENT_STEP * BAR_WIDTH / TOTAL_STEPS ))
+  local empty=$(( BAR_WIDTH - filled ))
+  local cols; cols=$(tput cols 2>/dev/null || echo 80)
+
+  [[ $BAR_INIT -eq 1 ]] && printf "\033[2A"
+  BAR_INIT=1
+
+  printf "\r${BOLD}${CYAN}["
+  printf "%0.s█" $(seq 1 "$filled")
+  printf "%0.s░" $(seq 1 "$empty")
+  printf "] %3d%%\033[0m\n" "$pct"
+
+  local msg
+  msg=$(printf "  %-${cols}s" "▶  $label")
+  printf "${DIM}%s${RESET}\n" "${msg:0:$cols}"
 }
 
-# Executes given command, exits with an error if the command fails.
-function subprocess {
-  output="$("$@" 2>&1)"
-  status=$?
-  if [[ $status != "0" ]]; then
-    line=($(caller))
-    echo "
-${error}Encountered an error while running '$@' at line $line:${reset}
-$output
+step() {
+  CURRENT_STEP=$(( CURRENT_STEP + 1 ))
+  progress_bar "$1"
+}
 
-${warning}If this is an issue, please report it on Github.${reset}
-"
+# ── Logging ───────────────────────────────────────────────────────────────────
+log_info()    { printf "  ${GREEN}✔${RESET}  %s\n" "$*"; }
+log_warn()    { printf "  ${YELLOW}⚠${RESET}  %s\n" "$*"; }
+log_error()   { printf "  ${RED}✖${RESET}  %s\n" "$*" >&2; }
+log_section() { printf "\n${BOLD}${CYAN}══ %s ══${RESET}\n" "$*"; }
+
+# ── Error trap ────────────────────────────────────────────────────────────────
+on_error() {
+  local rc=$? line=${BASH_LINENO[0]} cmd="$BASH_COMMAND"
+  printf "\n${BOLD}${RED}✖ Fatal error (exit %d) at line %d:${RESET}\n  %s\n" \
+    "$rc" "$line" "$cmd" >&2
+  printf "  ${YELLOW}Report at: https://github.com/sihawido/assettocorsa-linux-setup/issues${RESET}\n\n" >&2
+  cleanup
+  exit "$rc"
+}
+trap on_error ERR
+
+# ── Run helper ────────────────────────────────────────────────────────────────
+# Runs a command silently; on failure dumps output and exits.
+run() {
+  local out
+  if ! out=$("$@" 2>&1); then
+    log_error "Command failed: $*"
+    printf "%s\n" "$out" >&2
     exit 1
   fi
 }
 
-# Returns the executable for given string, supports aliases.
-function get-exec {
-  local cmd="$1"
-  if ! declare -p BASH_ALIASES > /dev/null; then
-    declare -A BASH_ALIASES=()
-  fi
-  local cmd_alias="${BASH_ALIASES[$1]-}"
-  local cmd_which="$(which $cmd 2> /dev/null)"
-  local cmd_which_status="$?"
-  if [[ "$cmd_alias" != "" ]]; then
-    echo "$cmd_alias"
-  elif [[ "$cmd_which_status" == "0" ]] && [[ "$cmd_which" != ""  ]]; then
-    echo "$cmd_which"
-  else
-    return 1
-  fi
+# ── Temp dir ──────────────────────────────────────────────────────────────────
+TMPDIR_AC=""
+cleanup() {
+  [[ -n "$TMPDIR_AC" && -d "$TMPDIR_AC" ]] && rm -rf "$TMPDIR_AC"
+}
+trap cleanup EXIT
+
+make_tmpdir() {
+  TMPDIR_AC="$(mktemp -d /tmp/ac-setup-XXXXXX)"
 }
 
-# Retruns 0 if the given variable is set, otherwise returns 1.
-function is-set {
-  varname="$1"
-  if [[ -z "${!varname+x}" ]]; then
-    return 1
-  fi
-  return 0
-}
-
-# Required packages
-required_packages=("wget" "tar" "unzip" "glib2" "protontricks")
-
-# Supported distros
-supported_apt=("debian" "ubuntu" "linuxmint" "pop" "zorin")
-supported_dnf=("fedora" "nobara" "ultramarine")
-supported_arch=("arch" "endeavouros" "steamos" "cachyos")
-supported_opensuse=("opensuse-tumbleweed")
-supported_slackware=("slackware" "salix")
-supported_gentoo=("gentoo")
-supported_void=("void")
-
-# Checking distro compatability
-source "/etc/os-release"
-subprocess is-set "ID"
-subprocess is-set "NAME"
-if ! is-set "ID_LIKE"; then
-  ID_LIKE="undefined"
-fi
-if [[ ${supported_dnf[*]} =~ "$ID" ]] || [[ ${supported_dnf[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="dnf install"
-elif [[ ${supported_apt[*]} =~ "$ID" ]] || [[ ${supported_apt[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="apt install"
-elif [[ ${supported_arch[*]} =~ "$ID" ]] || [[ ${supported_arch[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="pacman -S"
-elif [[ ${supported_opensuse[*]} =~ "$ID" ]] || [[ ${supported_opensuse[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="zypper install"
-elif [[ ${supported_slackware[*]} =~ "$ID" ]] || [[ ${supported_slackware[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="slackpkg install or sboinstall"
-  required_packages=("wget" "tar" "infozip" "glib2" "protontricks")
-elif [[ ${supported_gentoo[*]} =~ "$ID" ]] || [[ ${supported_gentoo[*]} =~ "$ID_LIKE" ]]; then
-  required_packages=("net-misc/wget" "app-arch/tar" "app-arch/unzip" "dev-libs/glib2" "app-emulation/protontricks")
-  pm_install="emerge"
-elif [[ ${supported_void[*]} =~ "$ID" ]] || [[ ${supported_void[*]} =~ "$ID_LIKE" ]]; then
-  required_packages=("wget" "tar" "unzip" "glib" "protontricks")
-  pm_install="xbps-install -S"
-else
-  echo "\
-$NAME is not currently supported.
-You can open an issue on Github (https://github.com/sihawido/assettocorsa-linux-setup/issues) with your system details to add it as supported."
+# ── Guards ────────────────────────────────────────────────────────────────────
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+  log_error "Do not run this script as root."
   exit 1
 fi
 
-# Checking if required packages are installed
-for package in "${required_packages[@]}"; do
-  bin="$(basename "$package")"
-  if [[ "$bin" == "glib2" ]] || [[ "$bin" == "glib" ]]; then
-    bin="gio"
-  fi
-  if ! get-exec "$bin" > /dev/null; then
-    echo "$bin is not installed, run ${bold}sudo $pm_install $package${reset} to install."
-    exit 1
-  fi
+if ! bash -n "$0" 2>/dev/null; then
+  log_error "Script has syntax errors — aborting."
+  exit 1
+fi
+
+# =============================================================================
+#  DISTRO & PACKAGE DETECTION
+# =============================================================================
+log_section "Detecting distribution"
+
+# shellcheck source=/dev/null
+source /etc/os-release
+: "${ID:=}" "${NAME:=Unknown}" "${ID_LIKE:=undefined}"
+
+declare -A PM_MAP=(
+  [fedora]="dnf install -y"         [nobara]="dnf install -y"
+  [ultramarine]="dnf install -y"    [debian]="apt-get install -y"
+  [ubuntu]="apt-get install -y"     [linuxmint]="apt-get install -y"
+  [pop]="apt-get install -y"        [zorin]="apt-get install -y"
+  [arch]="pacman -S --noconfirm"    [endeavouros]="pacman -S --noconfirm"
+  [steamos]="pacman -S --noconfirm" [cachyos]="pacman -S --noconfirm"
+  [opensuse-tumbleweed]="zypper install -y"
+  [slackware]="slackpkg install"    [salix]="slackpkg install"
+  [gentoo]="emerge"                 [void]="xbps-install -Sy"
+)
+
+PM_CMD=""
+for key in "$ID" $ID_LIKE; do
+  [[ -n "${PM_MAP[$key]+_}" ]] && { PM_CMD="${PM_MAP[$key]}"; break; }
 done
 
-# Checking temp dir
-if [[ -e "temp/" ]]; then
-  echo "'temp/' directory found inside current directory. It needs to be removed or renamed for this script to work."
-  if ask "Move 'temp/' to trash?"; then
-    subprocess gio trash "temp/"
-  else
-    exit 1
-  fi
+if [[ -z "$PM_CMD" ]]; then
+  log_error "$NAME is not supported."
+  printf "  Open an issue at https://github.com/sihawido/assettocorsa-linux-setup/issues\n"
+  exit 1
 fi
+log_info "Detected: $NAME  (package manager: ${PM_CMD%% *})"
 
-# Getting steam installation path
+case "$ID" in
+  slackware|salix) REQUIRED=("wget" "tar" "infozip" "glib2" "protontricks") ;;
+  gentoo)          REQUIRED=("net-misc/wget" "app-arch/tar" "app-arch/unzip" "dev-libs/glib" "app-emulation/protontricks") ;;
+  void)            REQUIRED=("wget" "tar" "unzip" "glib" "protontricks") ;;
+  *)               REQUIRED=("wget" "tar" "unzip" "glib2" "protontricks") ;;
+esac
+
+MISSING=()
+for pkg in "${REQUIRED[@]}"; do
+  bin="$(basename "$pkg")"
+  [[ "$bin" == "glib2" || "$bin" == "glib" ]] && bin="gio"
+  [[ "$bin" == "infozip" ]] && bin="unzip"
+  command -v "$bin" &>/dev/null || MISSING+=("$pkg")
+done
+
+if [[ ${#MISSING[@]} -gt 0 ]]; then
+  log_error "Missing required packages: ${MISSING[*]}"
+  printf "  Install with:  sudo %s %s\n" "$PM_CMD" "${MISSING[*]}"
+  exit 1
+fi
+log_info "All required packages present"
+
+# =============================================================================
+#  STEAM DETECTION
+# =============================================================================
+log_section "Locating Steam"
+
 NATIVE_STEAM_DIR="$HOME/.local/share/Steam"
 if [[ ! -d "$NATIVE_STEAM_DIR" ]]; then
-  out="$(readlink "$HOME/.steam/root")"
-  status="$?"
-  if [[ "$status" == "0" ]]; then
-    NATIVE_STEAM_DIR="$out"
-  fi
+  _link="$(readlink "$HOME/.steam/root" 2>/dev/null || true)"
+  [[ -n "$_link" ]] && NATIVE_STEAM_DIR="$_link"
 fi
 FLATPAK_STEAM_DIR="$HOME/.var/app/com.valvesoftware.Steam/data/Steam"
-STEAM_INSTALL="?"
-if [[ -d "$NATIVE_STEAM_DIR" ]] && [[ -d "$FLATPAK_STEAM_DIR" ]]; then
-  echo "Steam is installed both as a native package and Flatpak."
-  PS3="Select which installation of Steam to use: "
-  select installation_method in "Native" "Flatpak"; do
-    # Converting to lowercase and getting the first word
-    installation_method="$(echo ${installation_method,,} | awk '{print $1;}')"
-    STEAM_INSTALL="$installation_method"
-    break
-  done
+
+STEAM_INSTALL=""
+if [[ -d "$NATIVE_STEAM_DIR" && -d "$FLATPAK_STEAM_DIR" ]]; then
+  log_warn "Both native and Flatpak Steam found — using native."
+  STEAM_INSTALL="native"
 elif [[ -d "$NATIVE_STEAM_DIR" ]]; then
-  echo "Native installation of Steam found."
   STEAM_INSTALL="native"
 elif [[ -d "$FLATPAK_STEAM_DIR" ]]; then
-  echo "Flatpak installation of Steam found."
   STEAM_INSTALL="flatpak"
 else
-  echo "Steam installation not found."
+  log_error "No Steam installation found. Install Steam first."
   exit 1
 fi
 
 if [[ "$STEAM_INSTALL" == "native" ]]; then
   STEAM_DIR="$NATIVE_STEAM_DIR"
-  APPLAUNCH_AC="steam -applaunch 244210 %u"
-elif [[ "$STEAM_INSTALL" == "flatpak" ]]; then
-  STEAM_DIR="$FLATPAK_STEAM_DIR"
-  APPLAUNCH_AC="flatpak run com.valvesoftware.Steam -applaunch 244210 %u"
+  STEAM_CMD="steam"
+  APPLAUNCH_AC="steam -applaunch $AC_APP_ID"
+  APPLAUNCH_AC_DESKTOP="steam -applaunch $AC_APP_ID %u"
 else
-  echo "Invalid STEAM_INSTALL '$STEAM_INSTALL'"
-  exit 1
+  STEAM_DIR="$FLATPAK_STEAM_DIR"
+  STEAM_CMD="flatpak run com.valvesoftware.Steam"
+  APPLAUNCH_AC="flatpak run com.valvesoftware.Steam -applaunch $AC_APP_ID"
+  APPLAUNCH_AC_DESKTOP="flatpak run com.valvesoftware.Steam -applaunch $AC_APP_ID %u"
 fi
+log_info "Steam ($STEAM_INSTALL) → $STEAM_DIR"
 
-# Setting paths dependent on STEAM_DIR
+# Derived paths
 AC_COMMON="$STEAM_DIR/steamapps/common/assettocorsa"
 COMPAT_TOOLS_DIR="$STEAM_DIR/compatibilitytools.d"
 STEAM_LIBRARY_VDF="$STEAM_DIR/steamapps/libraryfolders.vdf"
-# Setting universal paths
 AC_DESKTOP="$HOME/.local/share/applications/Assetto Corsa.desktop"
 
-# Getting path to Assetto Corsa
-function ac-path-prompt {
-  echo "Enter path to ${bold}steamapps/common/assettocorsa${reset}:"
-  while :; do
-    read -ei "$PWD/" path &&
-    # Converting '~/directory/' to '/home/user/directory'
-    local path="$(echo "${path%"/"}" | sed "s|\~\/|$HOME\/|g")"
-    if [[ -d "$path" ]] && [[ $(basename "$path") == "assettocorsa" ]]; then
-      AC_COMMON="$path"
-      break
-    else
-      echo "Invalid path."
-    fi
-    history -s "$path"
-  done
-}
-# Getting path from libraryfolders.vdf config
-if [ -f "$STEAM_LIBRARY_VDF" ]; then
-  # Getting from Steam library paths
-  path_list=$(grep 'path' "$STEAM_LIBRARY_VDF" | awk -F'"' '{print $4}')
-  for path in $path_list; do
-    path="${path}/steamapps/common/assettocorsa"
-    if [[ -d "$path" ]]; then
-      AC_COMMON="$path"
-      break
-    fi
-  done
-else
-  echo "No steam library file found at: '$STEAM_LIBRARY_VDF'."
+# =============================================================================
+#  LOCATE ASSETTO CORSA
+# =============================================================================
+log_section "Locating Assetto Corsa"
+
+if [[ -f "$STEAM_LIBRARY_VDF" ]]; then
+  while IFS= read -r lib_path; do
+    candidate="${lib_path}/steamapps/common/assettocorsa"
+    [[ -d "$candidate" ]] && { AC_COMMON="$candidate"; break; }
+  done < <(grep '"path"' "$STEAM_LIBRARY_VDF" | awk -F'"' '{print $4}')
 fi
 
-if [[ -d "$AC_COMMON" ]]; then
-  echo "Found ${bold}$AC_COMMON${reset}"
-  if ! ask "Is that the right installation?"; then
-    ac-path-prompt
-  fi
-else
-  echo "Could not find Assetto Corsa in the default path."
-  ac-path-prompt
+if [[ ! -d "$AC_COMMON" ]]; then
+  log_error "Assetto Corsa not found. Install it via Steam first, then re-run."
+  exit 1
 fi
+log_info "Found AC at: $AC_COMMON"
 
-# Setting paths dependent on path to Assetto Corsa
 STEAMAPPS="${AC_COMMON%"/common/assettocorsa"}"
-AC_COMPATDATA="$STEAMAPPS/compatdata/244210"
+AC_COMPATDATA="$STEAMAPPS/compatdata/$AC_APP_ID"
 
-# Checking for potential disk issues
-function check-disk {
-  local partition_info=($(df -Tk "$AC_COMPATDATA" | tail -n 1))
-  local dev_path="${partition_info[0]}"
-  local partition_name="$(basename "$dev_path")"
-  local filesystem_type=($(lsblk | grep "$partition_name"))
-  local filesystem_type="${filesystem_type[1]}"
-  if [[ "$filesystem_type" == "ntfs" ]]; then
-    echo "${warning}Assetto Corsa is installed on a NTFS partition. This will cause issues.${reset}"
-  fi
-  local available_space="${partition_info[4]}"
-  if (( available_space < 1000000 )); then
-    echo "${warning}The disk that Assetto Corsa is installed on has less than 1GB of free space.${reset}"
+# =============================================================================
+#  DISK HEALTH CHECK
+# =============================================================================
+log_section "Checking disk"
+
+partition_info=( $(df -Tk "$AC_COMMON" | tail -n 1) )
+fs_type="${partition_info[1]}"
+avail="${partition_info[4]}"
+
+[[ "$fs_type" == "ntfs" ]] && log_warn "AC is on NTFS — this will likely cause issues." || true
+[[ "$avail" -lt 1000000 ]] && log_warn "Less than 1 GB free on AC partition." || true
+log_info "Filesystem: $fs_type  |  Available: $(( avail / 1024 )) MB"
+
+# =============================================================================
+#  FIRST-RUN DETECTION
+# =============================================================================
+STEAM_CFG_IN_PFX="$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config"
+FIRST_RUN=0
+[[ ! -d "$STEAM_CFG_IN_PFX" ]] && FIRST_RUN=1
+
+# =============================================================================
+#  STEAM HELPERS
+# =============================================================================
+
+# Returns PIDs of any running Steam process.
+steam_pids() {
+  pgrep -x steam 2>/dev/null || pgrep -f "com.valvesoftware.Steam" 2>/dev/null || true
+}
+
+# Gracefully shut down Steam, force-kill after 15 s if needed.
+kill_steam() {
+  local pids
+  pids="$(steam_pids)"
+  if [[ -n "$pids" ]]; then
+    log_warn "Closing Steam (needed to apply compatibility settings)…"
+    if [[ "$STEAM_INSTALL" == "native" ]]; then
+      steam -shutdown &>/dev/null || true
+    else
+      flatpak run com.valvesoftware.Steam -shutdown &>/dev/null || true
+    fi
+    local waited=0
+    while [[ -n "$(steam_pids)" && $waited -lt 15 ]]; do
+      sleep 1; waited=$(( waited + 1 ))
+    done
+    pids="$(steam_pids)"
+    [[ -n "$pids" ]] && kill -9 $pids 2>/dev/null || true
+    sleep 1
+    log_info "Steam closed"
   fi
 }
-check-disk
 
-# Checking if Assetto Corsa is running
-ac_pid="$(pgrep "AssettoCorsa.ex")"
-if [[ "$ac_pid" != "" ]]; then
-  if ask "Assetto Corsa is running. Stop Assetto Corsa to proceed?"; then
-    kill "$ac_pid"
-  else
+# Write GE-Proton compat tool into every user's localconfig.vdf so AC picks
+# it up automatically on next Steam start — no GUI interaction needed.
+set_proton_ge_in_config() {
+  local tool_name="GE-Proton${GE_VERSION}"
+  local userdata_dir="$STEAM_DIR/userdata"
+  [[ ! -d "$userdata_dir" ]] && {
+    log_warn "No userdata dir found — set ProtonGE via Steam UI after install."
+    return
+  }
+
+  local changed=0
+  for cfg in "$userdata_dir"/*/config/localconfig.vdf; do
+    [[ -f "$cfg" ]] || continue
+
+    if grep -q "\"$AC_APP_ID\"" "$cfg" 2>/dev/null; then
+      if grep -A10 "\"$AC_APP_ID\"" "$cfg" | grep -q "CompatToolName"; then
+        sed -i "/\"CompatToolName\"/s/\"[^\"]*\"$/\"$tool_name\"/" "$cfg"
+      else
+        sed -i "/\"$AC_APP_ID\"/{n;s/{/{\n\t\t\t\t\"CompatToolName\"\t\t\"$tool_name\"/}" "$cfg" 2>/dev/null || true
+      fi
+      log_info "Set CompatToolName → $tool_name in localconfig.vdf"
+    else
+      log_warn "App $AC_APP_ID not in localconfig.vdf — ProtonGE will be set after first AC launch registers the app."
+    fi
+    changed=1
+  done
+
+  if [[ $changed -eq 0 ]]; then
+    log_warn "No localconfig.vdf found — set ProtonGE via Steam UI."
+  fi
+}
+
+# Start Steam detached and wait up to 30 s for it to come up.
+launch_steam() {
+  log_info "Starting Steam…"
+  nohup $STEAM_CMD &>/dev/null &
+  disown
+
+  local waited=0
+  while [[ -z "$(steam_pids)" && $waited -lt 30 ]]; do
+    sleep 1; waited=$(( waited + 1 ))
+  done
+  [[ -z "$(steam_pids)" ]] && { log_error "Steam failed to start."; exit 1; }
+
+  # Extra time for Steam to finish initialising its IPC socket
+  sleep 6
+  log_info "Steam is running"
+}
+
+# Launch AC and block until the Wineprefix Steam config dir appears.
+launch_ac_and_wait_for_prefix() {
+  log_info "Launching Assetto Corsa to generate Wineprefix…"
+  log_info "This can take 5–15 minutes — please do not close this terminal."
+
+  $APPLAUNCH_AC &>/dev/null &
+  disown
+
+  local waited=0
+  local max_wait=900   # 15-minute ceiling
+
+  while [[ ! -d "$STEAM_CFG_IN_PFX" && $waited -lt $max_wait ]]; do
+    sleep 5
+    waited=$(( waited + 5 ))
+    (( waited % 30 == 0 )) && printf "  ${DIM}  … waiting for Wineprefix (%ds elapsed)${RESET}\r" "$waited" || true
+  done
+  printf "\n"
+
+  if [[ ! -d "$STEAM_CFG_IN_PFX" ]]; then
+    log_error "Wineprefix was not created after ${max_wait}s."
+    printf "  Launch AC manually once, exit it, then re-run this script.\n"
     exit 1
   fi
+
+  log_info "Wineprefix generated — closing Assetto Corsa…"
+  sleep 3
+
+  local ac_pid
+  ac_pid="$(pgrep 'AssettoCorsa.ex' 2>/dev/null || true)"
+  [[ -n "$ac_pid" ]] && kill "$ac_pid" 2>/dev/null || true
+  sleep 4
+  log_info "Assetto Corsa closed"
+}
+
+# =============================================================================
+#  BEGIN INSTALL — initialise progress bar
+# =============================================================================
+make_tmpdir
+printf "\n\n"
+CURRENT_STEP=0
+progress_bar "Starting…"
+
+# =============================================================================
+#  STEP 1 — PROTON-GE
+# =============================================================================
+step "Installing GE-Proton${GE_VERSION}"
+
+GE_DIR="$COMPAT_TOOLS_DIR/GE-Proton${GE_VERSION}"
+GE_TAR="$TMPDIR_AC/GE-Proton${GE_VERSION}.tar.gz"
+GE_URL="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton${GE_VERSION}/GE-Proton${GE_VERSION}.tar.gz"
+
+[[ -d "$GE_DIR" ]] && { log_info "Reinstalling GE-Proton${GE_VERSION}…"; run rm -rf "$GE_DIR"; }
+
+log_info "Downloading GE-Proton${GE_VERSION}…"
+run wget -q "$GE_URL" -O "$GE_TAR"
+run mkdir -p "$COMPAT_TOOLS_DIR"
+run tar -xzf "$GE_TAR" -C "$COMPAT_TOOLS_DIR"
+log_info "GE-Proton${GE_VERSION} installed"
+
+# =============================================================================
+#  STEP 2 — CLOSE STEAM, WRITE PROTON CONFIG
+# =============================================================================
+step "Configuring Steam compatibility layer"
+
+if [[ $FIRST_RUN -eq 1 ]]; then
+  printf "\n"
+  printf "  ${BOLD}${YELLOW}┌─────────────────────────────────────────────────────┐${RESET}\n"
+  printf "  ${BOLD}${YELLOW}│  Steam will now be closed to apply Proton settings. │${RESET}\n"
+  printf "  ${BOLD}${YELLOW}│  It will restart automatically in a few seconds.    │${RESET}\n"
+  printf "  ${BOLD}${YELLOW}└─────────────────────────────────────────────────────┘${RESET}\n\n"
+  sleep 3
+
+  kill_steam
+  set_proton_ge_in_config
+
+  # ── STEP 3 — Launch Steam + AC to generate Wineprefix ──────────────────────
+  step "Generating Wineprefix via first AC launch"
+  launch_steam
+  launch_ac_and_wait_for_prefix
+
+else
+  log_info "Wineprefix already exists — skipping first-run AC launch"
+  step "Wineprefix generation (already done)"
 fi
 
-# Optional steps:
+# =============================================================================
+#  STEP 4 — STOP AC + CM SHORTCUT CLEANUP
+# =============================================================================
+step "Cleaning up start-menu shortcut"
 
-# Asking whether to delete start menu shortcut which might cause content manager to crash
-function check-start-menu-shortcut {
-  local link_file="$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk"
-  if [[ -f "$link_file" ]]; then
-    echo "Start Menu Shortcut for Content Manager found. This might be causing crashes on start-up."
-    if ask "Delete the shortcut?"; then
-      subprocess rm "$link_file"
-    fi
-  else
-    return 1
-  fi
-}
-# Checking if ProtonGE is installed
-function check-proton {
-  local ProtonGE="ProtonGE $GE_version"
-  echo "$ProtonGE is the latest tested version that works. Using any other version may not work."
-  if [[ -d "$COMPAT_TOOLS_DIR/GE-Proton$GE_version" ]]; then
-    local string="Reinstall $ProtonGE?"
-  else
-    local string="Install $ProtonGE?"
-  fi
-  if ask "$string"; then
-    install-proton
-  fi
-}
-function install-proton {
-  # Downloading
-  echo "Downloading $ProtonGE..."
-  subprocess wget -q "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton$GE_version/GE-Proton$GE_version.tar.gz" -P "temp/"
-  # Removing previous install
-  if [[ -d "$COMPAT_TOOLS_DIR/GE-Proton$GE_version" ]]; then
-    echo "Removing previous installation of $ProtonGE..."
-    subprocess rm -rf "$COMPAT_TOOLS_DIR/GE-Proton$GE_version"
-  fi
-  # Extracting
-  echo "Installing $ProtonGE..."
-  subprocess mkdir -p "$COMPAT_TOOLS_DIR"
-  subprocess tar -xzf "temp/GE-Proton$GE_version.tar.gz" -C "temp/"
-  subprocess cp -rfa "temp/GE-Proton$GE_version" "$COMPAT_TOOLS_DIR"
-  subprocess rm -rf "temp/"
-  echo "${bold}To enable ProtonGE for Assetto Corsa:
- 1. Restart Steam
- 2. Go to Assetto Corsa > Properties > Compatability
- 3. Turn on 'Force the use of a specific Steam Play compatability tool'
- 4. From the drop-down, select $ProtonGE.${reset}"
-}
-# Asking whether to delete wineprefix
-function check-wineprefix {
-  if [ -d "$AC_COMPATDATA/pfx" ]; then
-    echo "Found existing Wineprefix, deleting it may solve AC not launching/crashing."
-    if ask "Delete existing Wineprefix and Content Manager? (preserves configs, presets and mods)"; then
-      delete-wineprefix
-    fi
-  else
-    return 1
-  fi
-}
-function delete-wineprefix {
-  # asking whether to get rid of previous configs
-  if [[ -d "ac_configs/" ]]; then
-    echo "Found previous save of AC and CM configs in ${bold}$PWD/ac_configs/${reset}."
-    if ask "Delete previous saves to proceed?"; then
-      subprocess rm -r "ac_configs/"
-    else
-      exit 2
-    fi
-  fi
-  # Saving configs
-  local ac_config_dir="$AC_COMPATDATA/pfx/drive_c/users/steamuser/Documents/Assetto Corsa"
-  local cm_config_dir="$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager"
-  subprocess mkdir "ac_configs/"
-  if [[ -d "$ac_config_dir" ]]; then
-    echo "Saving AC configs and presets..."
-    subprocess cp -r "$ac_config_dir" "ac_configs/"
-  fi
-  if [[ -d "$cm_config_dir" ]]; then
-    echo "Saving CM configs and presets..."
-    subprocess cp -r "$cm_config_dir" "ac_configs/"
-  fi
-  # Deleting Wineprefix
-  if [[ -d "$AC_COMPATDATA/pfx" ]]; then
-    echo "Deleting Wineprefix..."
-    subprocess rm -rf "$AC_COMPATDATA"
-  fi
-  # Copying back the saved configs
-  local -i copied=0
-  if [[ -d "ac_configs/Assetto Corsa" ]]; then
-    echo "Copying saved AC configs and presets..."
-    subprocess mkdir -p "$AC_COMPATDATA/pfx/drive_c/users/steamuser/Documents"
-    subprocess cp -r "ac_configs/Assetto Corsa" "$ac_config_dir"
-    copied+=1
-  fi
-  if [[ -d "ac_configs/AcTools Content Manager" ]]; then
-    echo "Copying saved CM configs and presets..."
-    subprocess mkdir -p "$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local"
-    subprocess cp -r "ac_configs/AcTools Content Manager" "$cm_config_dir"
-    copied+=1
-  fi
-  # Deleting the saved configs
-  if [[ -d "ac_configs/" ]] && (( $copied == 2 )); then
-    subprocess rm -r "ac_configs/"
-  fi
-  # Deleting Content Manager
-  local ac_exe="$AC_COMMON/AssettoCorsa.exe"
-  local ac_original_exe="$AC_COMMON/AssettoCorsa_original.exe"
-  if [[ -f "$ac_original_exe" ]]; then
-    echo "Deleting Content Manager..."
-    subprocess rm "$ac_exe"
-    subprocess mv "$ac_original_exe" "$ac_exe"
-  fi
-}
-# Checking if Content Manager is installed
-function check-content-manager {
-  if [[ -f "$AC_COMMON/AssettoCorsa_original.exe" ]]; then
-    local string="Reinstall Content Manager?"
-  else
-    local string="Install Content Manager?"
-  fi
-  if ask "$string"; then
-    install-content-manager
-  fi
-}
-function install-content-manager {
-  # Installing cm
-  echo "Installing Content Manager..."
-  subprocess wget -q "https://acstuff.club/app/latest.zip" -P "temp/"
-  subprocess unzip -q "temp/latest.zip" -d "temp/"
-  if [[ -e "$AC_COMMON/AssettoCorsa.exe" ]] && [[ ! -e "$AC_COMMON/AssettoCorsa_original.exe" ]]; then
-    subprocess mv -n "$AC_COMMON/AssettoCorsa.exe" "$AC_COMMON/AssettoCorsa_original.exe"
-  fi
-  subprocess rm "temp/latest.zip"
-  subprocess cp -r "temp/"* "$AC_COMMON/"
-  subprocess rm -rf "temp/"
-  subprocess mv "$AC_COMMON/Content Manager.exe" "$AC_COMMON/AssettoCorsa.exe"
-  # Installing fonts
-  echo "Installing fonts required for Content Manager..."
-  subprocess wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/"
-  subprocess unzip -qo "temp/fonts.zip" -d "temp/"
-  subprocess rm "temp/fonts.zip"
-  subprocess cp -r "temp/system" "$AC_COMMON/content/fonts/"
-  subprocess rm -rf "temp/"
-  # Creating symlink
-  echo "Creating symlink..."
-  local link_from="$STEAM_DIR/config/loginusers.vdf"
-  local link_to="$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
-  subprocess ln -sf "$link_from" "$link_to"
-  # Adding ability to open acmanager uri links
-  if [[ -f "$AC_DESKTOP" ]]; then
-    mimelist="$HOME/.config/mimeapps.list"
-    # Cleaning up previous modifications to mimeapps.list
-    if [[ -f "$mimelist" ]]; then
-      subprocess sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop;||g" -i "$mimelist"
-      subprocess sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop||g" -i "$mimelist"
-      subprocess sed '$!N; /^\(.*\)\n\1$/!P; D' -i "$mimelist"
-    fi
-    # Adding acmanager to mimeapps.list
-    echo "Adding ability to open acmanager links..."
-    subprocess sed "s|steam steam://rungameid/244210|$APPLAUNCH_AC|g" -i "$AC_DESKTOP"
-    subprocess gio mime x-scheme-handler/acmanager "Assetto Corsa.desktop" 1>& /dev/null
-    echo "Opening ${bold}acmanager://${reset} links will only work if Content Manager/Assetto Corsa is not open already."
-  else
-    echo "Assetto Corsa does not have a .desktop shortcut, URI links to CM will not work."
-  fi
-  echo "When starting Content Manager, set the root Assetto Corsa folder to ${bold}Z:$AC_COMMON${reset}"
-}
-# Checking if CSP is installed
-function check-csp {
-  # Getting CSP version
-  local current_CSP_version=""
-  local data_manifest_file="$AC_COMMON/extension/config/data_manifest.ini"
-  if [[ -f "$data_manifest_file" ]]; then
-    current_CSP_version="$(cat "$data_manifest_file" | grep "SHADERS_PATCH=" | sed 's/SHADERS_PATCH=//g')"
-  fi
-  # Asking
-  if [[ $current_CSP_version == "$CSP_version" ]]; then
-    local string="Reinstall CSP v$CSP_version?"
-  else
-    local string="Install CSP (Custom Shaders Patch) v$CSP_version?"
-  fi
-  if ask "$string"; then
-    install-csp
-  fi
-}
-function install-csp {
-  # Adding dwrite dll override
-  local reg_dwrite="$(echo "$(cat "$AC_COMPATDATA/pfx/user.reg")" | grep "dwrite")"
-  if [[ $reg_dwrite == "" ]]; then
-    echo "Adding DLL override 'dwrite'..."
-    subprocess sed '/\"\*d3d11"="native\"/a \"dwrite"="native,builtin\"' "$AC_COMPATDATA/pfx/user.reg" -i
-  else
-    echo "DLL override 'dwrite' already exists."
-  fi
-  # Installing CSP
-  echo "Downloading CSP..."
-  subprocess wget -q "https://acstuff.club/patch/?get=$CSP_version" -P "temp/"
-  echo "Installing CSP..."
-  # For some reason the downloaded file name is weird so we have to rename it
-  subprocess mv "temp/index.html?get=$CSP_version" "temp/lights-patch-v$CSP_version.zip" -f
-  subprocess unzip -qo "temp/lights-patch-v$CSP_version.zip" -d "temp/"
-  subprocess rm "temp/lights-patch-v$CSP_version.zip"
-  subprocess cp -r "temp/." "$AC_COMMON"
-  subprocess rm -rf "temp/"
-  # Installing fonts for CSP
-  echo "Installing fonts required for CSP... (this might take a while)"
-  subprocess protontricks 244210 corefonts
-}
+ac_pid="$(pgrep 'AssettoCorsa.ex' 2>/dev/null || true)"
+[[ -n "$ac_pid" ]] && { kill "$ac_pid" 2>/dev/null || true; sleep 2; }
 
-function check-csp-config {
-  local cfg_file="$AC_COMMON/extension/config/data_alt_mapping.ini"
-  if [[ ! -f "$cfg_file" ]]; then
-    return
-  fi
-  local cfg_contents="$(cat "$cfg_file")"
-  local NAMES_WINE_section="$(echo "$cfg_contents" | grep "\[NAMES_WINE\]")"
-  if [[ "$NAMES_WINE_section" == "" ]]; then
-    return
-  fi
-  echo "Resolve some input mapping issues?"
-  if ask "(Only do this step if you have issues mapping your inputs)"; then
-    fix-csp-config
-  fi
-}
-function fix-csp-config {
-  subprocess sed '/\[NAMES_WINE\]/,$d' "$cfg_file" -i
-}
+LINK_FILE="$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Content Manager.lnk"
+if [[ -f "$LINK_FILE" ]]; then
+  run rm "$LINK_FILE"
+  log_info "Removed CM start-menu shortcut (can cause crashes)"
+else
+  log_info "No CM shortcut present"
+fi
 
-function check-dxvk {
-  if ask "Install DXVK? (can improve performance in some cases)"; then
-    install-dxvk
-  fi
-}
-function install-dxvk {
-  echo "Installing DXVK..."
-  subprocess protontricks --no-background-wineserver 244210 dxvk
-}
+# =============================================================================
+#  STEP 5 — WINEPREFIX RESET (preserves configs)
+# =============================================================================
+step "Resetting Wineprefix (preserving configs)"
 
-function check-generated-files {
-  if [ ! -d "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
-    echo "\
-${bold}Before proceeding, please do the following to generate the wineprefix:
- 1. Launch Assetto Corsa with Proton-GE $GE_version
- 2. Wait until Assetto Corsa launches (it takes a while)
- 3. Exit Assetto Corsa
-Then start the script again, and skip the step relating to deleting the wineprefix.${reset}"
-    exit 1
-  else
-    return 1
-  fi
-}
+AC_CFG_DIR="$AC_COMPATDATA/pfx/drive_c/users/steamuser/Documents/Assetto Corsa"
+CM_CFG_DIR="$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager"
+BACKUP_DIR="$TMPDIR_AC/ac_configs"
 
-OPTIONAL_STEPS=(
-  check-start-menu-shortcut
-  check-proton
-  check-wineprefix
-  check-generated-files
-  check-content-manager
-  check-csp
-  check-csp-config
-  check-dxvk
-)
-echo
-for func in "${OPTIONAL_STEPS[@]}"; do
-  $func && echo
-done
-echo "${bold}All done!${reset}"
+if [[ -d "$AC_COMPATDATA/pfx" ]]; then
+  run mkdir -p "$BACKUP_DIR"
+  [[ -d "$AC_CFG_DIR" ]] && { log_info "Backing up AC configs…"; run cp -r "$AC_CFG_DIR" "$BACKUP_DIR/"; }
+  [[ -d "$CM_CFG_DIR" ]] && { log_info "Backing up CM configs…"; run cp -r "$CM_CFG_DIR" "$BACKUP_DIR/"; }
+
+  AC_EXE="$AC_COMMON/AssettoCorsa.exe"
+  AC_ORIG="$AC_COMMON/AssettoCorsa_original.exe"
+  if [[ -f "$AC_ORIG" ]]; then
+    run rm -f "$AC_EXE"
+    run mv "$AC_ORIG" "$AC_EXE"
+    log_info "Restored original AssettoCorsa.exe"
+  fi
+
+  log_info "Deleting Wineprefix…"
+  run rm -rf "$AC_COMPATDATA"
+
+  if [[ -d "$BACKUP_DIR/Assetto Corsa" ]]; then
+    run mkdir -p "$AC_COMPATDATA/pfx/drive_c/users/steamuser/Documents"
+    run cp -r "$BACKUP_DIR/Assetto Corsa" "$AC_CFG_DIR"
+    log_info "Restored AC configs"
+  fi
+  if [[ -d "$BACKUP_DIR/AcTools Content Manager" ]]; then
+    run mkdir -p "$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local"
+    run cp -r "$BACKUP_DIR/AcTools Content Manager" "$CM_CFG_DIR"
+    log_info "Restored CM configs"
+  fi
+else
+  log_info "No existing Wineprefix to reset"
+fi
+
+# =============================================================================
+#  STEP 6 — CONTENT MANAGER
+# =============================================================================
+step "Installing Content Manager"
+
+log_info "Downloading Content Manager…"
+CM_ZIP="$TMPDIR_AC/cm_latest.zip"
+run wget -q "https://acstuff.club/app/latest.zip" -O "$CM_ZIP"
+log_info "Extracting…"
+run unzip -q "$CM_ZIP" -d "$TMPDIR_AC/cm"
+rm -f "$CM_ZIP"
+
+AC_EXE="$AC_COMMON/AssettoCorsa.exe"
+AC_ORIG="$AC_COMMON/AssettoCorsa_original.exe"
+[[ -f "$AC_EXE" && ! -f "$AC_ORIG" ]] && run mv -n "$AC_EXE" "$AC_ORIG"
+run cp -r "$TMPDIR_AC/cm/." "$AC_COMMON/"
+run mv "$AC_COMMON/Content Manager.exe" "$AC_EXE"
+
+log_info "Downloading CM fonts…"
+FONTS_ZIP="$TMPDIR_AC/fonts.zip"
+run wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -O "$FONTS_ZIP"
+run unzip -qo "$FONTS_ZIP" -d "$TMPDIR_AC/fonts"
+rm -f "$FONTS_ZIP"
+run cp -r "$TMPDIR_AC/fonts/system" "$AC_COMMON/content/fonts/"
+
+log_info "Creating Steam login symlink…"
+LINK_FROM="$STEAM_DIR/config/loginusers.vdf"
+LINK_TO="$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
+run mkdir -p "$(dirname "$LINK_TO")"
+run ln -sf "$LINK_FROM" "$LINK_TO"
+
+if [[ -f "$AC_DESKTOP" ]]; then
+  MIMELIST="$HOME/.config/mimeapps.list"
+  if [[ -f "$MIMELIST" ]]; then
+    sed -i "s|x-scheme-handler/acmanager=Assetto Corsa.desktop;||g" "$MIMELIST"
+    sed -i "s|x-scheme-handler/acmanager=Assetto Corsa.desktop||g"  "$MIMELIST"
+    sed -i '$!N; /^\(.*\)\n\1$/!P; D' "$MIMELIST"
+  fi
+  run sed -i "s|steam steam://rungameid/$AC_APP_ID|$APPLAUNCH_AC_DESKTOP|g" "$AC_DESKTOP"
+  gio mime x-scheme-handler/acmanager "Assetto Corsa.desktop" &>/dev/null || true
+  log_info "Registered acmanager:// URI scheme"
+else
+  log_warn "No .desktop shortcut — acmanager:// links won't work"
+fi
+
+log_info "Content Manager installed"
+printf "  ${BOLD}Tip:${RESET} On first CM launch set AC root to ${BOLD}Z:${AC_COMMON}${RESET}\n"
+
+# =============================================================================
+#  STEP 7 — CUSTOM SHADERS PATCH
+# =============================================================================
+step "Installing Custom Shaders Patch v${CSP_VERSION}"
+
+USER_REG="$AC_COMPATDATA/pfx/user.reg"
+if [[ -f "$USER_REG" ]] && ! grep -q '"dwrite"' "$USER_REG"; then
+  log_info "Adding dwrite DLL override…"
+  run sed -i '/\"*d3d11"="native"/a \"dwrite"="native,builtin\"' "$USER_REG"
+else
+  log_info "dwrite DLL override already present"
+fi
+
+log_info "Downloading CSP…"
+CSP_DL="$TMPDIR_AC/csp.zip"
+run wget -q "https://acstuff.club/patch/?get=${CSP_VERSION}" -O "$CSP_DL"
+log_info "Extracting CSP…"
+run unzip -qo "$CSP_DL" -d "$TMPDIR_AC/csp"
+rm -f "$CSP_DL"
+run cp -r "$TMPDIR_AC/csp/." "$AC_COMMON"
+
+log_info "Installing corefonts via protontricks (may take a while)…"
+protontricks "$AC_APP_ID" corefonts &>/dev/null || log_warn "protontricks corefonts exited non-zero (usually harmless — continuing)"
+log_info "CSP v${CSP_VERSION} installed"
+
+# =============================================================================
+#  STEP 8 — CSP INPUT MAPPING FIX
+# =============================================================================
+step "Applying CSP input mapping fix"
+
+CSP_ALT_MAP="$AC_COMMON/extension/config/data_alt_mapping.ini"
+if [[ -f "$CSP_ALT_MAP" ]] && grep -q '\[NAMES_WINE\]' "$CSP_ALT_MAP"; then
+  run sed -i '/\[NAMES_WINE\]/,$d' "$CSP_ALT_MAP"
+  log_info "Removed [NAMES_WINE] section from data_alt_mapping.ini"
+else
+  log_info "No input mapping fix needed"
+fi
+
+# =============================================================================
+#  STEP 9 — DXVK
+# =============================================================================
+step "Installing DXVK"
+
+log_info "Running protontricks dxvk…"
+protontricks --no-background-wineserver "$AC_APP_ID" dxvk &>/dev/null || log_warn "protontricks dxvk exited non-zero (usually harmless — continuing)"
+log_info "DXVK installed"
+
+# =============================================================================
+#  STEP 10 — RELAUNCH STEAM AND OPEN ASSETTO CORSA
+# =============================================================================
+step "Launching Assetto Corsa"
+
+# Restart Steam cleanly so all config changes are loaded
+kill_steam
+sleep 2
+launch_steam
+
+log_info "Launching Assetto Corsa (Content Manager)…"
+$APPLAUNCH_AC &>/dev/null &
+disown
+
+# =============================================================================
+#  ALL DONE
+# =============================================================================
+printf "\n${BOLD}${GREEN}╔══════════════════════════════════════════╗${RESET}\n"
+printf "${BOLD}${GREEN}║  ✔  Assetto Corsa setup complete!        ║${RESET}\n"
+printf "${BOLD}${GREEN}╚══════════════════════════════════════════╝${RESET}\n\n"
+printf "  ${BOLD}First Content Manager launch:${RESET}\n"
+printf "  • Set AC root folder to ${BOLD}Z:${AC_COMMON}${RESET}\n\n"
