@@ -18,6 +18,7 @@ After running the script you should be able to launch Assetto Corsa from Steam w
   ```
 > **Warning**: Always be careful when running scripts from the internet.
 3. Follow every step in the console (y - stands for yes, n - stands for no).
+> **Note**: If you encounter an error with protontricks, something like `SyntaxError: Invalid file magic number`, use [pipx to install a more up-to-date version](https://github.com/Matoking/protontricks?tab=readme-ov-file#pipx) ([#33](https://github.com/sihawido/assettocorsa-linux-setup/issues/33)).
 4. Launch Assetto Corsa from Steam (it might take a while on the first run, be patient).
 5. In Content Manager set the Assetto Corsa root folder to `Z:\path\to\Steam\steamapps\common\assettocorsa`.
 6. In Content Manager, go to `Settings -> Content Manager -> Appearace` and check "Disable windows transparency" (fixes the full-black tooltips, pop-ups and dialogues).
