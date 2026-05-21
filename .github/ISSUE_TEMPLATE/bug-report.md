@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a bug with the script
+about: Report a bug with the script.
 title: ''
 labels: ''
 assignees: ''
