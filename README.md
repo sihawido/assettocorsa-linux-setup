@@ -16,9 +16,11 @@ After running the script you should be able to launch Assetto Corsa from Steam w
   ```
   curl -Os https://raw.githubusercontent.com/sihawido/assettocorsa-linux-setup/main/assettocorsa-linux-setup.sh && bash assettocorsa-linux-setup.sh
   ```
-> **Warning**: Always be careful when running scripts from the internet.
+> [!WARNING]
+> Always be careful when running scripts from the internet.
 3. Follow every step in the console (y - stands for yes, n - stands for no).
-> **Note**: If you encounter an error with protontricks, something like `SyntaxError: Invalid file magic number`, use [pipx to install a more up-to-date version](https://github.com/Matoking/protontricks?tab=readme-ov-file#pipx) ([#33](https://github.com/sihawido/assettocorsa-linux-setup/issues/33)).
+> [!NOTE]
+> If you encounter an error with protontricks, something like `SyntaxError: Invalid file magic number`, use [pipx to install a more up-to-date version](https://github.com/Matoking/protontricks?tab=readme-ov-file#pipx) ([#33](https://github.com/sihawido/assettocorsa-linux-setup/issues/33)).
 4. Launch Assetto Corsa from Steam (it might take a while on the first run, be patient).
 5. In Content Manager set the Assetto Corsa root folder to `Z:\path\to\Steam\steamapps\common\assettocorsa`.
 6. In Content Manager, go to `Settings -> Content Manager -> Appearace` and check "Disable windows transparency" (fixes the full-black tooltips, pop-ups and dialogues).
@@ -32,4 +34,3 @@ After running the script you should be able to launch Assetto Corsa from Steam w
 - Content Manager can sometimes crash while loading a server's info, there is an [open pull request to fix it](https://github.com/gro-ove/actools/pull/114), but it's unclear whether it will ever be merged.
 ### Other
 - To fix the font in Content Manager (it's Times New Roman by default) run `protontricks 244210 regedit` in the terminal. Then, in the opened window, go to `HKEY_CURRENT_USER\Software\Wine\Fonts\Replacements` and rename the `Replacements` key to `Replacements Backup`.
-- To keep your Proton-GE updated consider using [ProtonUp-Qt](https://flathub.org/apps/net.davidotek.pupgui2) or [ProtonPlus](https://flathub.org/apps/com.vysp3r.ProtonPlus).
