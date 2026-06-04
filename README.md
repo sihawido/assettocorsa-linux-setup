@@ -6,7 +6,7 @@ A shell script based on [this](https://steamcommunity.com/sharedfiles/filedetail
 
 - Installs [Proton-GE](https://github.com/GloriousEggroll/proton-ge-custom)
 - Installs [Content Manager](https://assettocorsa.club/content-manager.html) and everything else required for it to work
-- Adds Content Manager to mimeapps.list (allows opening `acmanager://` race invite links)
+- Adds an `acmanager://` URI handler for opening race invite links in Content Manager
 - Installs [Custom Shaders Patch (CSP)](https://acstuff.club/patch/) and everything else required for it to work
 - Installs [DXVK](https://github.com/doitsujin/dxvk)
 - Optionally installs [SimHub](https://github.com/SHWotever/SimHub) into Assetto Corsa's Proton prefix
@@ -74,5 +74,6 @@ After the install finishes:
 
 ### Other
 
+- Race invite links using the `acmanager://` scheme should open through Content Manager. When Content Manager is closed, the handler starts it through Steam. When Content Manager is already open, the handler tries to pass the invite directly to Content Manager inside the existing Proton prefix. If a specific invite source still fails, copy the `ip` and `httpPort` values from the link and search for `ip:httpPort` in Content Manager's server browser.
 - To fix the font in Content Manager (it's Times New Roman by default) run `protontricks 244210 regedit` in the terminal. Then, in the opened window, go to `HKEY_CURRENT_USER\Software\Wine\Fonts\Replacements` and rename the `Replacements` key to `Replacements Backup`.
 - SimHub is installed into Assetto Corsa's compatibility prefix and should be started after Assetto Corsa. Starting SimHub first and then launching Assetto Corsa from SimHub can prevent Steam from launching the game correctly.

@@ -184,10 +184,8 @@ fi
 
 if [[ "$STEAM_INSTALL" == "native" ]]; then
   STEAM_DIR="$NATIVE_STEAM_DIR"
-  APPLAUNCH_AC="steam -applaunch 244210 %u"
 elif [[ "$STEAM_INSTALL" == "flatpak" ]]; then
   STEAM_DIR="$FLATPAK_STEAM_DIR"
-  APPLAUNCH_AC="flatpak run com.valvesoftware.Steam -applaunch 244210 %u"
 else
   echo "Invalid STEAM_INSTALL '$STEAM_INSTALL'"
   exit 1
@@ -197,8 +195,6 @@ fi
 AC_COMMON="$STEAM_DIR/steamapps/common/assettocorsa"
 COMPAT_TOOLS_DIR="$STEAM_DIR/compatibilitytools.d"
 STEAM_LIBRARY_VDF="$STEAM_DIR/steamapps/libraryfolders.vdf"
-# Setting universal paths
-AC_DESKTOP="$HOME/.local/share/applications/Assetto Corsa.desktop"
 
 # Getting path to Assetto Corsa
 function ac-path-prompt {
@@ -395,6 +391,65 @@ function check-content-manager {
     install-content-manager
   fi
 }
+function install-acmanager-handler {
+  local handler="$HOME/.local/bin/acmanager-handler"
+  local desktop_file="$HOME/.local/share/applications/acmanager-handler.desktop"
+  local mimelist="$HOME/.config/mimeapps.list"
+  local ac_exe="$AC_COMMON/AssettoCorsa.exe"
+  local quoted_ac_exe
+  printf -v quoted_ac_exe "%q" "$ac_exe"
+
+  echo "Adding ability to open acmanager links..."
+  subprocess mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications"
+  cat >"$handler" <<HANDLEREOF
+#! /usr/bin/env bash
+set -u
+
+uri="\${1-}"
+if [[ "\$uri" == "" ]]; then
+  exit 0
+fi
+
+ac_exe=$quoted_ac_exe
+if pgrep "AssettoCorsa.ex" >/dev/null; then
+  exec protontricks-launch --appid 244210 "\$ac_exe" "\$uri"
+fi
+
+HANDLEREOF
+
+  if [[ "$STEAM_INSTALL" == "native" ]]; then
+    cat >>"$handler" <<'HANDLEREOF'
+exec steam -applaunch 244210 "$uri"
+HANDLEREOF
+  elif [[ "$STEAM_INSTALL" == "flatpak" ]]; then
+    cat >>"$handler" <<'HANDLEREOF'
+exec flatpak run com.valvesoftware.Steam -applaunch 244210 "$uri"
+HANDLEREOF
+  else
+    echo "${error}Invalid STEAM_INSTALL '$STEAM_INSTALL'${reset}"
+    exit 1
+  fi
+
+  subprocess chmod +x "$handler"
+  cat >"$desktop_file" <<DESKTOPEOF
+[Desktop Entry]
+Type=Application
+Name=Content Manager URI Handler
+Exec="$handler" %u
+MimeType=x-scheme-handler/acmanager;
+NoDisplay=true
+DESKTOPEOF
+
+  # Cleaning up previous modifications to mimeapps.list
+  if [[ -f "$mimelist" ]]; then
+    subprocess sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop;||g" -i "$mimelist"
+    subprocess sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop||g" -i "$mimelist"
+    subprocess sed '$!N; /^\(.*\)\n\1$/!P; D' -i "$mimelist"
+  fi
+
+  subprocess gio mime x-scheme-handler/acmanager "acmanager-handler.desktop" 1>/dev/null
+  echo "Opening ${bold}acmanager://${reset} links will try to pass race invites to Content Manager, even when it is already open."
+}
 function install-content-manager {
   # Installing cm
   echo "Installing Content Manager..."
@@ -419,23 +474,7 @@ function install-content-manager {
   local link_from="$STEAM_DIR/config/loginusers.vdf"
   local link_to="$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
   subprocess ln -sf "$link_from" "$link_to"
-  # Adding ability to open acmanager uri links
-  if [[ -f "$AC_DESKTOP" ]]; then
-    mimelist="$HOME/.config/mimeapps.list"
-    # Cleaning up previous modifications to mimeapps.list
-    if [[ -f "$mimelist" ]]; then
-      subprocess sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop;||g" -i "$mimelist"
-      subprocess sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop||g" -i "$mimelist"
-      subprocess sed '$!N; /^\(.*\)\n\1$/!P; D' -i "$mimelist"
-    fi
-    # Adding acmanager to mimeapps.list
-    echo "Adding ability to open acmanager links..."
-    subprocess sed "s|steam steam://rungameid/244210|$APPLAUNCH_AC|g" -i "$AC_DESKTOP"
-    subprocess gio mime x-scheme-handler/acmanager "Assetto Corsa.desktop" 1>&/dev/null
-    echo "Opening ${bold}acmanager://${reset} links will only work if Content Manager/Assetto Corsa is not open already."
-  else
-    echo "Assetto Corsa does not have a .desktop shortcut, URI links to CM will not work."
-  fi
+  install-acmanager-handler
   echo "When starting Content Manager, set the root Assetto Corsa folder to ${bold}Z:$AC_COMMON${reset}"
 }
 # Checking if CSP is installed
