@@ -22,6 +22,7 @@ fi
 # Versions
 GE_version="9-20"
 CSP_version="0.2.11"
+SIMHUB_VERSION="9.11.13"
 
 # Defining text styles for readablity
 bold=$(echo -e "\033[1m")
@@ -34,8 +35,8 @@ function ask {
   while true; do
     read -rp "$* [y/n]: " yn
     case $yn in
-      [Yy]*) return 0 ;;
-      [Nn]*) return 1 ;;
+    [Yy]*) return 0 ;;
+    [Nn]*) return 1 ;;
     esac
   done
 }
@@ -59,15 +60,15 @@ ${warning}If this is an issue, please report it on Github.${reset}
 # Returns the executable for given string, supports aliases.
 function get-exec {
   local cmd="$1"
-  if ! declare -p BASH_ALIASES > /dev/null; then
+  if ! declare -p BASH_ALIASES >/dev/null; then
     declare -A BASH_ALIASES=()
   fi
   local cmd_alias="${BASH_ALIASES[$1]-}"
-  local cmd_which="$(which $cmd 2> /dev/null)"
+  local cmd_which="$(which $cmd 2>/dev/null)"
   local cmd_which_status="$?"
   if [[ "$cmd_alias" != "" ]]; then
     echo "$cmd_alias"
-  elif [[ "$cmd_which_status" == "0" ]] && [[ "$cmd_which" != ""  ]]; then
+  elif [[ "$cmd_which_status" == "0" ]] && [[ "$cmd_which" != "" ]]; then
     echo "$cmd_which"
   else
     return 1
@@ -134,7 +135,7 @@ for package in "${required_packages[@]}"; do
   elif [[ "$bin" == "infozip" ]]; then
     bin="unzip"
   fi
-  if ! get-exec "$bin" > /dev/null; then
+  if ! get-exec "$bin" >/dev/null; then
     echo "$bin is not installed, run ${bold}sudo $pm_install $package${reset} to install."
     exit 1
   fi
@@ -204,8 +205,8 @@ function ac-path-prompt {
   echo "Enter path to ${bold}steamapps/common/assettocorsa${reset}:"
   while :; do
     read -ei "$PWD/" path &&
-    # Converting '~/directory/' to '/home/user/directory'
-    local path="$(echo "${path%"/"}" | sed "s|\~\/|$HOME\/|g")"
+      # Converting '~/directory/' to '/home/user/directory'
+      local path="$(echo "${path%"/"}" | sed "s|\~\/|$HOME\/|g")"
     if [[ -d "$path" ]] && [[ $(basename "$path") == "assettocorsa" ]]; then
       AC_COMMON="$path"
       break
@@ -243,17 +244,18 @@ fi
 # Setting paths dependent on path to Assetto Corsa
 STEAMAPPS="${AC_COMMON%"/common/assettocorsa"}"
 AC_COMPATDATA="$STEAMAPPS/compatdata/244210"
+SIMHUB_DIR="$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/SimHub"
 
 # Checking for potential disk issues
 function check-disk {
-  local dev_path="$(findmnt -no SOURCE --target  "$AC_COMPATDATA")"
+  local dev_path="$(findmnt -no SOURCE --target "$AC_COMPATDATA")"
   local filesystem_type="$(lsblk -no fstype "$dev_path")"
   if [[ "$filesystem_type" == "ntfs" ]]; then
     echo "${warning}Assetto Corsa is installed on a NTFS partition. This will cause issues.${reset}"
   fi
   local available_space=($(df -P "$AC_COMPATDATA" | tail -1))
   available_space="${available_space[3]}"
-  if (( available_space < 1000000 )); then
+  if ((available_space < 1000000)); then
     echo "${warning}The disk that Assetto Corsa is installed on has less than 1GB of free space.${reset}"
   fi
 }
@@ -370,7 +372,7 @@ function delete-wineprefix {
     copied+=1
   fi
   # Deleting the saved configs
-  if [[ -d "ac_configs/" ]] && (( $copied == 2 )); then
+  if [[ -d "ac_configs/" ]] && (($copied == 2)); then
     subprocess rm -r "ac_configs/"
   fi
   # Deleting Content Manager
@@ -429,7 +431,7 @@ function install-content-manager {
     # Adding acmanager to mimeapps.list
     echo "Adding ability to open acmanager links..."
     subprocess sed "s|steam steam://rungameid/244210|$APPLAUNCH_AC|g" -i "$AC_DESKTOP"
-    subprocess gio mime x-scheme-handler/acmanager "Assetto Corsa.desktop" 1>& /dev/null
+    subprocess gio mime x-scheme-handler/acmanager "Assetto Corsa.desktop" 1>&/dev/null
     echo "Opening ${bold}acmanager://${reset} links will only work if Content Manager/Assetto Corsa is not open already."
   else
     echo "Assetto Corsa does not have a .desktop shortcut, URI links to CM will not work."
@@ -507,6 +509,166 @@ function install-dxvk {
   subprocess protontricks --no-background-wineserver 244210 dxvk
 }
 
+function check-simhub {
+  if [[ -d "$SIMHUB_DIR" ]]; then
+    local string="Reinstall SimHub $SIMHUB_VERSION?"
+  else
+    local string="Install SimHub $SIMHUB_VERSION?"
+  fi
+  if ask "$string"; then
+    install-simhub
+  fi
+}
+function install-simhub {
+  echo "Downloading SimHub..."
+  subprocess wget -q "https://github.com/SHWotever/SimHub/releases/download/$SIMHUB_VERSION/SimHub.$SIMHUB_VERSION.zip" -P "temp/"
+  echo "Installing SimHub..."
+  subprocess unzip -qo "temp/SimHub.$SIMHUB_VERSION.zip" -d "temp/"
+  local installer="$(ls temp/SimHubSetup_*.exe | head -1)"
+  subprocess protontricks-launch --appid 244210 "$(pwd)/$installer" /VERYSILENT /SUPPRESSMSGBOXES /DIR="C:\\Program Files (x86)\\SimHub"
+  subprocess rm -rf "temp/"
+  echo "Installing .NET Framework 4.8 (required by SimHub)..."
+  subprocess protontricks 244210 dotnet48
+  echo "Creating launcher script..."
+  subprocess mkdir -p "$HOME/.local/bin"
+  local launcher="$HOME/.local/bin/simhub"
+  cat >"$launcher" <<LAUNCHEREOF
+#! /usr/bin/env bash
+exec protontricks-launch --appid 244210 "$SIMHUB_DIR/SimHubWPF.exe" "\$@"
+LAUNCHEREOF
+  subprocess chmod +x "$launcher"
+  if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    echo "${warning}$HOME/.local/bin is not in PATH. Add it or run SimHub with: ${bold}$launcher${reset}"
+  fi
+  echo "${bold}Start Assetto Corsa from Steam/Content Manager first, then start SimHub with: ${launcher}${reset}"
+}
+
+function get-zip-entry {
+  local zip_file="$1"
+  local filename="$2"
+  local entry
+  while IFS= read -r entry; do
+    if [[ "$entry" == "$filename" ]] || [[ "$entry" == */"$filename" ]]; then
+      echo "$entry"
+      return 0
+    fi
+  done < <(unzip -Z -1 "$zip_file")
+  return 1
+}
+
+function unzip-allow-backslash-warning {
+  local output
+  output="$(unzip "$@" 2>&1)"
+  local status=$?
+  if [[ "$status" == "0" ]]; then
+    return 0
+  fi
+  if [[ "$status" == "1" ]] && [[ "$output" == *"appears to use backslashes as path separators"* ]]; then
+    return 0
+  fi
+  line=($(caller))
+  echo "
+${error}Encountered an error while running 'unzip $@' at line $line:${reset}
+$output
+
+${warning}If this is an issue, please report it on Github.${reset}
+"
+  exit 1
+}
+
+function check-carplay-addon {
+  if [[ ! -d "$SIMHUB_DIR" ]]; then
+    return 1
+  fi
+  if ask "Install Apple CarPlay SimHub dashboard addon?"; then
+    install-carplay-addon
+  fi
+}
+function install-carplay-addon {
+  local default_dir="$HOME/Downloads/Assetto Downloads/Carplay"
+  echo "Enter path to folder containing ${bold}Apple-CarPlay.zip${reset} and ${bold}SimHubUDPConnector.zip${reset}:"
+  read -ei "$default_dir" addon_dir || return 1
+  addon_dir="$(echo "${addon_dir%"/"}" | sed "s|\~\/|$HOME\/|g")"
+
+  local carplay_zip="$addon_dir/Apple-CarPlay.zip"
+  local udpconnector_zip="$addon_dir/SimHubUDPConnector.zip"
+  if [[ ! -f "$carplay_zip" ]] || [[ ! -f "$udpconnector_zip" ]]; then
+    echo "${warning}Apple CarPlay addon install skipped.${reset}"
+    echo "Required files:"
+    echo " - $carplay_zip"
+    echo " - $udpconnector_zip"
+    return 1
+  fi
+
+  local simhubdash_entry
+  simhubdash_entry="$(get-zip-entry "$carplay_zip" "Apple-CarPlay.simhubdash")" || {
+    echo "${error}Apple-CarPlay.simhubdash was not found in $carplay_zip.${reset}"
+    return 1
+  }
+  local dll_entry
+  dll_entry="$(get-zip-entry "$udpconnector_zip" "DaZD.UDPConnector.dll")" || {
+    echo "${error}DaZD.UDPConnector.dll was not found in $udpconnector_zip.${reset}"
+    return 1
+  }
+  local ac_app_entry
+  ac_app_entry="$(get-zip-entry "$udpconnector_zip" "SimHubUDPConnector/Assetto Corsa/app/SimHubUDPConnector.zip")" || {
+    echo "${error}Assetto Corsa SimHubUDPConnector app zip was not found in $udpconnector_zip.${reset}"
+    return 1
+  }
+  local torque_extension_entry
+  torque_extension_entry="$(get-zip-entry "$carplay_zip" "TorquePowerExtensionMy.lua")" || {
+    echo "${error}TorquePowerExtensionMy.lua was not found in $carplay_zip.${reset}"
+    return 1
+  }
+  local font_entry
+  font_entry="$(get-zip-entry "$carplay_zip" "SF-Pro.ttf")" || {
+    echo "${error}SF-Pro.ttf was not found in $carplay_zip.${reset}"
+    return 1
+  }
+
+  local cm_presets_dir="$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager/Presets/Custom Previews"
+  local cm_preset_entries=()
+  if [[ -d "$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager" ]]; then
+    for preset in "preview_light.cmpreset" "preview_nolight.cmpreset"; do
+      local preset_entry
+      preset_entry="$(get-zip-entry "$carplay_zip" "$preset")" || {
+        echo "${error}$preset was not found in $carplay_zip.${reset}"
+        return 1
+      }
+      cm_preset_entries+=("$preset_entry")
+    done
+  fi
+
+  echo "Installing Apple CarPlay SimHub dashboard addon..."
+  subprocess mkdir -p "temp/carplay"
+  subprocess unzip -qo "$carplay_zip" "$simhubdash_entry" -d "temp/carplay"
+  subprocess mkdir -p "$SIMHUB_DIR/DashTemplates"
+  unzip-allow-backslash-warning -qo "temp/carplay/$simhubdash_entry" -d "$SIMHUB_DIR/DashTemplates"
+  subprocess unzip -jqo "$udpconnector_zip" "$dll_entry" -d "$SIMHUB_DIR"
+  subprocess unzip -jqo "$udpconnector_zip" "$ac_app_entry" -d "temp/carplay"
+  subprocess unzip -qo "temp/carplay/SimHubUDPConnector.zip" -d "$AC_COMMON"
+
+  local extension_dir="$AC_COMMON/apps/lua/SimHubUDPConnector/extensions"
+  subprocess mkdir -p "$extension_dir"
+  subprocess unzip -jqo "$carplay_zip" "$torque_extension_entry" -d "$extension_dir"
+  subprocess mkdir -p "$SIMHUB_DIR/DashFonts" "$AC_COMPATDATA/pfx/drive_c/windows/Fonts"
+  subprocess unzip -jqo "$carplay_zip" "$font_entry" -d "$SIMHUB_DIR/DashFonts"
+  subprocess unzip -jqo "$carplay_zip" "$font_entry" -d "$AC_COMPATDATA/pfx/drive_c/windows/Fonts"
+  if ((${#cm_preset_entries[@]} > 0)); then
+    subprocess mkdir -p "$cm_presets_dir"
+    for preset_entry in "${cm_preset_entries[@]}"; do
+      subprocess unzip -jqo "$carplay_zip" "$preset_entry" -d "$cm_presets_dir"
+    done
+  fi
+
+  subprocess rm -rf "temp/"
+  echo "${bold}Apple CarPlay addon installed. Post-install steps:
+ 1. Start Assetto Corsa first, then SimHub.
+ 2. In AC/CSP, enable the SimHub UDPConnector extension and activate TorquePowerExtensionMy.
+ 3. In SimHub, enable Media Information and set the dashboard's simulated keys to match AC controls.
+ 4. In Content Manager, generate previews twice using preview_light and preview_nolight.${reset}"
+}
+
 function check-generated-files {
   if [ ! -d "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
     echo "\
@@ -530,6 +692,8 @@ OPTIONAL_STEPS=(
   check-csp
   check-csp-config
   check-dxvk
+  check-simhub
+  check-carplay-addon
 )
 echo
 for func in "${OPTIONAL_STEPS[@]}"; do
