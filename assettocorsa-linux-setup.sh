@@ -87,7 +87,7 @@ function is-set {
 required_packages=("wget" "tar" "unzip" "glib2" "protontricks")
 
 # Supported distros
-supported_apt=("debian" "ubuntu" "linuxmint" "pop" "zorin")
+supported_apt=("debian" "ubuntu" "linuxmint" "pop" "zorin" "neon")
 supported_dnf=("fedora" "nobara" "ultramarine")
 supported_arch=("arch" "endeavouros" "steamos" "cachyos" "artix")
 supported_opensuse=("opensuse-tumbleweed")
