@@ -19,15 +19,22 @@ if [[ $USER == "root" ]]; then
   exit 1
 fi
 
-# Versions
-GE_version="9-20"
-CSP_version="0.2.11"
+# Constants
+GE_VERSION="9-20"
+CSP_VERSION="0.2.11"
+REPO_LINK="https://github.com/sihawido/assettocorsa-linux-setup"
 
 # Defining text styles for readablity
 bold=$(echo -e "\033[1m")
 warning=$(echo -e "\033[33m")
 error=$(echo -e "${bold}\033[31m")
 reset=$(echo -e "\033[0m")
+
+function hyperlink {
+  local text="$1"
+  local link="$2"
+  printf "\e]8;;${link}\e\\${text}\e]8;;\e\\"
+}
 
 # Provides a yes/no prompt.
 function ask {
@@ -87,8 +94,8 @@ function is-set {
 required_packages=("wget" "tar" "unzip" "glib2" "protontricks")
 
 # Supported distros
-supported_apt=("debian" "ubuntu" "linuxmint" "pop" "zorin" "neon")
-supported_dnf=("fedora" "nobara" "ultramarine")
+supported_debian=("debian" "ubuntu" "linuxmint" "pop" "zorin" "neon")
+supported_fedora=("fedora" "nobara" "ultramarine")
 supported_arch=("arch" "endeavouros" "steamos" "cachyos" "artix")
 supported_opensuse=("opensuse-tumbleweed")
 supported_slackware=("slackware" "salix")
@@ -102,9 +109,9 @@ subprocess is-set "NAME"
 if ! is-set "ID_LIKE"; then
   ID_LIKE="undefined"
 fi
-if [[ ${supported_dnf[*]} =~ "$ID" ]] || [[ ${supported_dnf[*]} =~ "$ID_LIKE" ]]; then
+if [[ ${supported_fedora[*]} =~ "$ID" ]] || [[ ${supported_fedora[*]} =~ "$ID_LIKE" ]]; then
   pm_install="dnf install"
-elif [[ ${supported_apt[*]} =~ "$ID" ]] || [[ ${supported_apt[*]} =~ "$ID_LIKE" ]]; then
+elif [[ ${supported_debian[*]} =~ "$ID" ]] || [[ ${supported_debian[*]} =~ "$ID_LIKE" ]]; then
   pm_install="apt install"
 elif [[ ${supported_arch[*]} =~ "$ID" ]] || [[ ${supported_arch[*]} =~ "$ID_LIKE" ]]; then
   pm_install="pacman -S"
@@ -114,15 +121,22 @@ elif [[ ${supported_slackware[*]} =~ "$ID" ]] || [[ ${supported_slackware[*]} =~
   pm_install="slackpkg install or sboinstall"
   required_packages=("wget" "tar" "infozip" "glib2" "protontricks")
 elif [[ ${supported_gentoo[*]} =~ "$ID" ]] || [[ ${supported_gentoo[*]} =~ "$ID_LIKE" ]]; then
-  required_packages=("net-misc/wget" "app-arch/tar" "app-arch/unzip" "dev-libs/glib2" "app-emulation/protontricks")
   pm_install="emerge"
+  required_packages=(
+    "net-misc/wget"
+    "app-arch/tar"
+    "app-arch/unzip"
+    "dev-libs/glib2"
+    "app-emulation/protontricks"
+  )
 elif [[ ${supported_void[*]} =~ "$ID" ]] || [[ ${supported_void[*]} =~ "$ID_LIKE" ]]; then
   required_packages=("wget" "tar" "unzip" "glib" "protontricks")
   pm_install="xbps-install -S"
 else
   echo "\
 $NAME is not currently supported.
-You can open an issue on Github (https://github.com/sihawido/assettocorsa-linux-setup/issues) with your system details to add it as supported."
+You can open an issue on $(hyperlink "Github" "$REPO_LINK/issues") with \
+your system details to add it as supported."
   exit 1
 fi
 
@@ -135,14 +149,17 @@ for package in "${required_packages[@]}"; do
     bin="unzip"
   fi
   if ! get-exec "$bin" > /dev/null; then
-    echo "$bin is not installed, run ${bold}sudo $pm_install $package${reset} to install."
+    install_command="sudo $pm_install $package$"
+    install_command="${bold}${install_command}${reset}"
+    echo "$bin is not installed, run $install_command to install."
     exit 1
   fi
 done
 
 # Checking temp dir
 if [[ -e "temp/" ]]; then
-  echo "'temp/' directory found inside current directory. It needs to be removed or renamed for this script to work."
+  echo "'temp/' directory found inside current directory."
+  echo "It needs to be removed or renamed for this script to work."
   if ask "Move 'temp/' to trash?"; then
     subprocess gio trash "temp/"
   else
@@ -261,7 +278,7 @@ AC_COMPATDATA="$STEAMAPPS/compatdata/244210"
 
 # Checking for potential disk issues
 function check-disk {
-  local dev_path="$(findmnt -no SOURCE --target  "$AC_COMPATDATA")"
+  local dev_path="$(findmnt -no SOURCE --target "$AC_COMPATDATA")"
   local filesystem_type="$(lsblk -no fstype "$dev_path")"
   if [[ "$filesystem_type" == "ntfs" ]]; then
     echo "${warning}Assetto Corsa is installed on a NTFS partition. This will cause issues.${reset}"
@@ -298,11 +315,13 @@ function check-start-menu-shortcut {
     return 1
   fi
 }
+
 # Checking if ProtonGE is installed
 function check-proton {
-  local ProtonGE="ProtonGE $GE_version"
-  echo "$ProtonGE is the latest tested version that works. Using any other version may not work."
-  if [[ -d "$COMPAT_TOOLS_DIR/GE-Proton$GE_version" ]]; then
+  local ProtonGE="ProtonGE $GE_VERSION"
+  printf "$ProtonGE is the latest tested version that works."
+  echo " Using any other version may not work."
+  if [[ -d "$COMPAT_TOOLS_DIR/GE-Proton$GE_VERSION" ]]; then
     local string="Reinstall $ProtonGE?"
   else
     local string="Install $ProtonGE?"
@@ -311,20 +330,24 @@ function check-proton {
     install-proton
   fi
 }
+
 function install-proton {
+  local ge_repo_link="https://github.com/GloriousEggroll/proton-ge-custom"
+  local ge_download_link="$ge_repo_link/releases/download"
+  local ge_download_link="$ge_download_link/GE-Proton$GE_VERSION/GE-Proton$GE_VERSION.tar.gz"
   # Downloading
   echo "Downloading $ProtonGE..."
-  subprocess wget -q "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton$GE_version/GE-Proton$GE_version.tar.gz" -P "temp/"
+  subprocess wget -q "$ge_download_link" -P "temp/"
   # Removing previous install
-  if [[ -d "$COMPAT_TOOLS_DIR/GE-Proton$GE_version" ]]; then
+  if [[ -d "$COMPAT_TOOLS_DIR/GE-Proton$GE_VERSION" ]]; then
     echo "Removing previous installation of $ProtonGE..."
-    subprocess rm -rf "$COMPAT_TOOLS_DIR/GE-Proton$GE_version"
+    subprocess rm -rf "$COMPAT_TOOLS_DIR/GE-Proton$GE_VERSION"
   fi
   # Extracting
   echo "Installing $ProtonGE..."
   subprocess mkdir -p "$COMPAT_TOOLS_DIR"
-  subprocess tar -xzf "temp/GE-Proton$GE_version.tar.gz" -C "temp/"
-  subprocess cp -rfa "temp/GE-Proton$GE_version" "$COMPAT_TOOLS_DIR"
+  subprocess tar -xzf "temp/GE-Proton$GE_VERSION.tar.gz" -C "temp/"
+  subprocess cp -rfa "temp/GE-Proton$GE_VERSION" "$COMPAT_TOOLS_DIR"
   subprocess rm -rf "temp/"
   echo "${bold}To enable ProtonGE for Assetto Corsa:
  1. Restart Steam
@@ -332,10 +355,11 @@ function install-proton {
  3. Turn on 'Force the use of a specific Steam Play compatability tool'
  4. From the drop-down, select $ProtonGE.${reset}"
 }
+
 # Asking whether to delete wineprefix
 function check-wineprefix {
   if [ -d "$AC_COMPATDATA/pfx" ]; then
-    echo "Found existing Wineprefix, deleting it may solve AC not launching/crashing."
+    echo "Found existing Wineprefix. Deleting it may solve AC not launching/crashing."
     if ask "Delete existing Wineprefix and Content Manager? (preserves configs, presets and mods)"; then
       delete-wineprefix
     fi
@@ -343,6 +367,7 @@ function check-wineprefix {
     return 1
   fi
 }
+
 function delete-wineprefix {
   # asking whether to get rid of previous configs
   if [[ -d "ac_configs/" ]]; then
@@ -397,6 +422,7 @@ function delete-wineprefix {
     subprocess mv "$ac_original_exe" "$ac_exe"
   fi
 }
+
 # Checking if Content Manager is installed
 function check-content-manager {
   if [[ -f "$AC_COMMON/AssettoCorsa_original.exe" ]]; then
@@ -408,40 +434,41 @@ function check-content-manager {
     install-content-manager
   fi
 }
+
 function install-content-manager {
-  # Installing cm
   echo "Installing Content Manager..."
   subprocess wget -q "https://acstuff.club/app/latest.zip" -P "temp/"
   subprocess unzip -q "temp/latest.zip" -d "temp/"
-  if [[ -e "$AC_COMMON/AssettoCorsa.exe" ]] && [[ ! -e "$AC_COMMON/AssettoCorsa_original.exe" ]]; then
+  if [[ -e "$AC_COMMON/AssettoCorsa.exe" ]] \
+     && [[ ! -e "$AC_COMMON/AssettoCorsa_original.exe" ]]
+  then
     subprocess mv -n "$AC_COMMON/AssettoCorsa.exe" "$AC_COMMON/AssettoCorsa_original.exe"
   fi
   subprocess rm "temp/latest.zip"
   subprocess cp -r "temp/"* "$AC_COMMON/"
   subprocess rm -rf "temp/"
   subprocess mv "$AC_COMMON/Content Manager.exe" "$AC_COMMON/AssettoCorsa.exe"
-  # Installing fonts
+
   echo "Installing fonts required for Content Manager..."
   subprocess wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/"
   subprocess unzip -qo "temp/fonts.zip" -d "temp/"
   subprocess rm "temp/fonts.zip"
   subprocess cp -r "temp/system" "$AC_COMMON/content/fonts/"
   subprocess rm -rf "temp/"
-  # Creating symlink
+
   echo "Creating symlink..."
   local link_from="$STEAM_DIR/config/loginusers.vdf"
   local link_to="$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
   subprocess ln -sf "$link_from" "$link_to"
-  # Adding ability to open acmanager uri links
+
   if [[ -f "$AC_DESKTOP" ]]; then
-    mimelist="$HOME/.config/mimeapps.list"
+    local mimelist="$HOME/.config/mimeapps.list"
     # Cleaning up previous modifications to mimeapps.list
     if [[ -f "$mimelist" ]]; then
       subprocess sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop;||g" -i "$mimelist"
       subprocess sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop||g" -i "$mimelist"
       subprocess sed '$!N; /^\(.*\)\n\1$/!P; D' -i "$mimelist"
     fi
-    # Adding acmanager to mimeapps.list
     echo "Adding ability to open acmanager links..."
     subprocess sed "s|steam steam://rungameid/244210|$APPLAUNCH_AC|g" -i "$AC_DESKTOP"
     subprocess gio mime x-scheme-handler/acmanager "Assetto Corsa.desktop" 1>& /dev/null
@@ -451,26 +478,25 @@ function install-content-manager {
   fi
   echo "When starting Content Manager, set the root Assetto Corsa folder to ${bold}Z:$AC_COMMON${reset}"
 }
-# Checking if CSP is installed
+
 function check-csp {
-  # Getting CSP version
   local current_CSP_version=""
   local data_manifest_file="$AC_COMMON/extension/config/data_manifest.ini"
   if [[ -f "$data_manifest_file" ]]; then
     current_CSP_version="$(cat "$data_manifest_file" | grep "SHADERS_PATCH=" | sed 's/SHADERS_PATCH=//g')"
   fi
-  # Asking
-  if [[ $current_CSP_version == "$CSP_version" ]]; then
-    local string="Reinstall CSP v$CSP_version?"
+
+  if [[ $current_CSP_version == "$CSP_VERSION" ]]; then
+    local string="Reinstall CSP v$CSP_VERSION?"
   else
-    local string="Install CSP (Custom Shaders Patch) v$CSP_version?"
+    local string="Install CSP (Custom Shaders Patch) v$CSP_VERSION?"
   fi
   if ask "$string"; then
     install-csp
   fi
 }
+
 function install-csp {
-  # Adding dwrite dll override
   local reg_dwrite="$(echo "$(cat "$AC_COMPATDATA/pfx/user.reg")" | grep "dwrite")"
   if [[ $reg_dwrite == "" ]]; then
     echo "Adding DLL override 'dwrite'..."
@@ -478,17 +504,18 @@ function install-csp {
   else
     echo "DLL override 'dwrite' already exists."
   fi
-  # Installing CSP
+
   echo "Downloading CSP..."
-  subprocess wget -q "https://acstuff.club/patch/?get=$CSP_version" -P "temp/"
+  subprocess wget -q "https://acstuff.club/patch/?get=$CSP_VERSION" -P "temp/"
   echo "Installing CSP..."
+
   # For some reason the downloaded file name is weird so we have to rename it
-  subprocess mv "temp/index.html?get=$CSP_version" "temp/lights-patch-v$CSP_version.zip" -f
-  subprocess unzip -qo "temp/lights-patch-v$CSP_version.zip" -d "temp/"
-  subprocess rm "temp/lights-patch-v$CSP_version.zip"
+  subprocess mv "temp/index.html?get=$CSP_VERSION" "temp/lights-patch-v$CSP_VERSION.zip" -f
+  subprocess unzip -qo "temp/lights-patch-v$CSP_VERSION.zip" -d "temp/"
+  subprocess rm "temp/lights-patch-v$CSP_VERSION.zip"
   subprocess cp -r "temp/." "$AC_COMMON"
   subprocess rm -rf "temp/"
-  # Installing fonts for CSP
+
   echo "Installing fonts required for CSP... (this might take a while)"
   # Add the STEAM_DIR environment variable to the protontricks command so that it can find the Steam installation path.
   export STEAM_DIR="$STEAM_DIR"
@@ -510,6 +537,7 @@ function check-csp-config {
     fix-csp-config
   fi
 }
+
 function fix-csp-config {
   subprocess sed '/\[NAMES_WINE\]/,$d' "$cfg_file" -i
 }
@@ -528,7 +556,7 @@ function check-generated-files {
   if [ ! -d "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
     echo "\
 ${bold}Before proceeding, please do the following to generate the wineprefix:
- 1. Launch Assetto Corsa with Proton-GE $GE_version
+ 1. Launch Assetto Corsa with Proton-GE $GE_VERSION
  2. Wait until Assetto Corsa launches (it takes a while)
  3. Exit Assetto Corsa
 Then start the script again, and skip the step relating to deleting the wineprefix.${reset}"
