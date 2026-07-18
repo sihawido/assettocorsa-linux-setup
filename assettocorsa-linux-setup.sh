@@ -48,7 +48,7 @@ function ask {
 }
 
 # Executes given command, exits with an error if the command fails.
-function subprocess {
+function run {
   output="$("$@" 2>&1)"
   status=$?
   if [[ $status != "0" ]]; then
@@ -104,8 +104,8 @@ supported_void=("void")
 
 # Checking distro compatability
 source "/etc/os-release"
-subprocess is-set "ID"
-subprocess is-set "NAME"
+run is-set "ID"
+run is-set "NAME"
 if ! is-set "ID_LIKE"; then
   ID_LIKE="undefined"
 fi
@@ -161,7 +161,7 @@ if [[ -e "temp/" ]]; then
   echo "'temp/' directory found inside current directory."
   echo "It needs to be removed or renamed for this script to work."
   if ask "Move 'temp/' to trash?"; then
-    subprocess gio trash "temp/"
+    run gio trash "temp/"
   else
     exit 1
   fi
@@ -309,7 +309,7 @@ function check-start-menu-shortcut {
   if [[ -f "$link_file" ]]; then
     echo "Start Menu Shortcut for Content Manager found. This might be causing crashes on start-up."
     if ask "Delete the shortcut?"; then
-      subprocess rm "$link_file"
+      run rm "$link_file"
     fi
   else
     return 1
@@ -337,18 +337,18 @@ function install-proton {
   local ge_download_link="$ge_download_link/GE-Proton$GE_VERSION/GE-Proton$GE_VERSION.tar.gz"
   # Downloading
   echo "Downloading $ProtonGE..."
-  subprocess wget -q "$ge_download_link" -P "temp/"
+  run wget -q "$ge_download_link" -P "temp/"
   # Removing previous install
   if [[ -d "$COMPAT_TOOLS_DIR/GE-Proton$GE_VERSION" ]]; then
     echo "Removing previous installation of $ProtonGE..."
-    subprocess rm -rf "$COMPAT_TOOLS_DIR/GE-Proton$GE_VERSION"
+    run rm -rf "$COMPAT_TOOLS_DIR/GE-Proton$GE_VERSION"
   fi
   # Extracting
   echo "Installing $ProtonGE..."
-  subprocess mkdir -p "$COMPAT_TOOLS_DIR"
-  subprocess tar -xzf "temp/GE-Proton$GE_VERSION.tar.gz" -C "temp/"
-  subprocess cp -rfa "temp/GE-Proton$GE_VERSION" "$COMPAT_TOOLS_DIR"
-  subprocess rm -rf "temp/"
+  run mkdir -p "$COMPAT_TOOLS_DIR"
+  run tar -xzf "temp/GE-Proton$GE_VERSION.tar.gz" -C "temp/"
+  run cp -rfa "temp/GE-Proton$GE_VERSION" "$COMPAT_TOOLS_DIR"
+  run rm -rf "temp/"
   echo "${bold}To enable ProtonGE for Assetto Corsa:
  1. Restart Steam
  2. Go to Assetto Corsa > Properties > Compatability
@@ -373,7 +373,7 @@ function delete-wineprefix {
   if [[ -d "ac_configs/" ]]; then
     echo "Found previous save of AC and CM configs in ${bold}$PWD/ac_configs/${reset}."
     if ask "Delete previous saves to proceed?"; then
-      subprocess rm -r "ac_configs/"
+      run rm -r "ac_configs/"
     else
       exit 2
     fi
@@ -381,45 +381,45 @@ function delete-wineprefix {
   # Saving configs
   local ac_config_dir="$AC_COMPATDATA/pfx/drive_c/users/steamuser/Documents/Assetto Corsa"
   local cm_config_dir="$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local/AcTools Content Manager"
-  subprocess mkdir "ac_configs/"
+  run mkdir "ac_configs/"
   if [[ -d "$ac_config_dir" ]]; then
     echo "Saving AC configs and presets..."
-    subprocess cp -r "$ac_config_dir" "ac_configs/"
+    run cp -r "$ac_config_dir" "ac_configs/"
   fi
   if [[ -d "$cm_config_dir" ]]; then
     echo "Saving CM configs and presets..."
-    subprocess cp -r "$cm_config_dir" "ac_configs/"
+    run cp -r "$cm_config_dir" "ac_configs/"
   fi
   # Deleting Wineprefix
   if [[ -d "$AC_COMPATDATA/pfx" ]]; then
     echo "Deleting Wineprefix..."
-    subprocess rm -rf "$AC_COMPATDATA"
+    run rm -rf "$AC_COMPATDATA"
   fi
   # Copying back the saved configs
   local -i copied=0
   if [[ -d "ac_configs/Assetto Corsa" ]]; then
     echo "Copying saved AC configs and presets..."
-    subprocess mkdir -p "$AC_COMPATDATA/pfx/drive_c/users/steamuser/Documents"
-    subprocess cp -r "ac_configs/Assetto Corsa" "$ac_config_dir"
+    run mkdir -p "$AC_COMPATDATA/pfx/drive_c/users/steamuser/Documents"
+    run cp -r "ac_configs/Assetto Corsa" "$ac_config_dir"
     copied+=1
   fi
   if [[ -d "ac_configs/AcTools Content Manager" ]]; then
     echo "Copying saved CM configs and presets..."
-    subprocess mkdir -p "$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local"
-    subprocess cp -r "ac_configs/AcTools Content Manager" "$cm_config_dir"
+    run mkdir -p "$AC_COMPATDATA/pfx/drive_c/users/steamuser/AppData/Local"
+    run cp -r "ac_configs/AcTools Content Manager" "$cm_config_dir"
     copied+=1
   fi
   # Deleting the saved configs
   if [[ -d "ac_configs/" ]] && (( $copied == 2 )); then
-    subprocess rm -r "ac_configs/"
+    run rm -r "ac_configs/"
   fi
   # Deleting Content Manager
   local ac_exe="$AC_COMMON/AssettoCorsa.exe"
   local ac_original_exe="$AC_COMMON/AssettoCorsa_original.exe"
   if [[ -f "$ac_original_exe" ]]; then
     echo "Deleting Content Manager..."
-    subprocess rm "$ac_exe"
-    subprocess mv "$ac_original_exe" "$ac_exe"
+    run rm "$ac_exe"
+    run mv "$ac_original_exe" "$ac_exe"
   fi
 }
 
@@ -437,41 +437,41 @@ function check-content-manager {
 
 function install-content-manager {
   echo "Installing Content Manager..."
-  subprocess wget -q "https://acstuff.club/app/latest.zip" -P "temp/"
-  subprocess unzip -q "temp/latest.zip" -d "temp/"
+  run wget -q "https://acstuff.club/app/latest.zip" -P "temp/"
+  run unzip -q "temp/latest.zip" -d "temp/"
   if [[ -e "$AC_COMMON/AssettoCorsa.exe" ]] \
      && [[ ! -e "$AC_COMMON/AssettoCorsa_original.exe" ]]
   then
-    subprocess mv -n "$AC_COMMON/AssettoCorsa.exe" "$AC_COMMON/AssettoCorsa_original.exe"
+    run mv -n "$AC_COMMON/AssettoCorsa.exe" "$AC_COMMON/AssettoCorsa_original.exe"
   fi
-  subprocess rm "temp/latest.zip"
-  subprocess cp -r "temp/"* "$AC_COMMON/"
-  subprocess rm -rf "temp/"
-  subprocess mv "$AC_COMMON/Content Manager.exe" "$AC_COMMON/AssettoCorsa.exe"
+  run rm "temp/latest.zip"
+  run cp -r "temp/"* "$AC_COMMON/"
+  run rm -rf "temp/"
+  run mv "$AC_COMMON/Content Manager.exe" "$AC_COMMON/AssettoCorsa.exe"
 
   echo "Installing fonts required for Content Manager..."
-  subprocess wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/"
-  subprocess unzip -qo "temp/fonts.zip" -d "temp/"
-  subprocess rm "temp/fonts.zip"
-  subprocess cp -r "temp/system" "$AC_COMMON/content/fonts/"
-  subprocess rm -rf "temp/"
+  run wget -q "https://files.acstuff.ru/shared/T0Zj/fonts.zip" -P "temp/"
+  run unzip -qo "temp/fonts.zip" -d "temp/"
+  run rm "temp/fonts.zip"
+  run cp -r "temp/system" "$AC_COMMON/content/fonts/"
+  run rm -rf "temp/"
 
   echo "Creating symlink..."
   local link_from="$STEAM_DIR/config/loginusers.vdf"
   local link_to="$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
-  subprocess ln -sf "$link_from" "$link_to"
+  run ln -sf "$link_from" "$link_to"
 
   if [[ -f "$AC_DESKTOP" ]]; then
     local mimelist="$HOME/.config/mimeapps.list"
     # Cleaning up previous modifications to mimeapps.list
     if [[ -f "$mimelist" ]]; then
-      subprocess sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop;||g" -i "$mimelist"
-      subprocess sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop||g" -i "$mimelist"
-      subprocess sed '$!N; /^\(.*\)\n\1$/!P; D' -i "$mimelist"
+      run sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop;||g" -i "$mimelist"
+      run sed "s|x-scheme-handler/acmanager=Assetto Corsa.desktop||g" -i "$mimelist"
+      run sed '$!N; /^\(.*\)\n\1$/!P; D' -i "$mimelist"
     fi
     echo "Adding ability to open acmanager links..."
-    subprocess sed "s|steam steam://rungameid/244210|$APPLAUNCH_AC|g" -i "$AC_DESKTOP"
-    subprocess gio mime x-scheme-handler/acmanager "Assetto Corsa.desktop" 1>& /dev/null
+    run sed "s|steam steam://rungameid/244210|$APPLAUNCH_AC|g" -i "$AC_DESKTOP"
+    run gio mime x-scheme-handler/acmanager "Assetto Corsa.desktop" 1>& /dev/null
     echo "Opening ${bold}acmanager://${reset} links will only work if Content Manager/Assetto Corsa is not open already."
   else
     echo "Assetto Corsa does not have a .desktop shortcut, URI links to CM will not work."
@@ -500,26 +500,26 @@ function install-csp {
   local reg_dwrite="$(echo "$(cat "$AC_COMPATDATA/pfx/user.reg")" | grep "dwrite")"
   if [[ $reg_dwrite == "" ]]; then
     echo "Adding DLL override 'dwrite'..."
-    subprocess sed '/\"\*d3d11"="native\"/a \"dwrite"="native,builtin\"' "$AC_COMPATDATA/pfx/user.reg" -i
+    run sed '/\"\*d3d11"="native\"/a \"dwrite"="native,builtin\"' "$AC_COMPATDATA/pfx/user.reg" -i
   else
     echo "DLL override 'dwrite' already exists."
   fi
 
   echo "Downloading CSP..."
-  subprocess wget -q "https://acstuff.club/patch/?get=$CSP_VERSION" -P "temp/"
+  run wget -q "https://acstuff.club/patch/?get=$CSP_VERSION" -P "temp/"
   echo "Installing CSP..."
 
   # For some reason the downloaded file name is weird so we have to rename it
-  subprocess mv "temp/index.html?get=$CSP_VERSION" "temp/lights-patch-v$CSP_VERSION.zip" -f
-  subprocess unzip -qo "temp/lights-patch-v$CSP_VERSION.zip" -d "temp/"
-  subprocess rm "temp/lights-patch-v$CSP_VERSION.zip"
-  subprocess cp -r "temp/." "$AC_COMMON"
-  subprocess rm -rf "temp/"
+  run mv -f "temp/index.html?get=$CSP_VERSION" "temp/lights-patch-v$CSP_VERSION.zip"
+  run unzip -qo "temp/lights-patch-v$CSP_VERSION.zip" -d "temp/"
+  run rm "temp/lights-patch-v$CSP_VERSION.zip"
+  run cp -r "temp/." "$AC_COMMON"
+  run rm -rf "temp/"
 
   echo "Installing fonts required for CSP... (this might take a while)"
   # Add the STEAM_DIR environment variable to the protontricks command so that it can find the Steam installation path.
   export STEAM_DIR="$STEAM_DIR"
-  subprocess protontricks 244210 corefonts
+  run protontricks 244210 corefonts
 }
 
 function check-csp-config {
@@ -539,7 +539,7 @@ function check-csp-config {
 }
 
 function fix-csp-config {
-  subprocess sed '/\[NAMES_WINE\]/,$d' "$cfg_file" -i
+  run sed '/\[NAMES_WINE\]/,$d' "$cfg_file" -i
 }
 
 function check-dxvk {
@@ -549,7 +549,7 @@ function check-dxvk {
 }
 function install-dxvk {
   echo "Installing DXVK..."
-  subprocess protontricks --no-background-wineserver 244210 dxvk
+  run protontricks --no-background-wineserver 244210 dxvk
 }
 
 function check-generated-files {
