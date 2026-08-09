@@ -490,6 +490,8 @@ function install-csp {
   subprocess rm -rf "temp/"
   # Installing fonts for CSP
   echo "Installing fonts required for CSP... (this might take a while)"
+  # Add the STEAM_DIR environment variable to the protontricks command so that it can find the Steam installation path.
+  export STEAM_DIR="$STEAM_DIR"
   subprocess protontricks 244210 corefonts
 }
 
