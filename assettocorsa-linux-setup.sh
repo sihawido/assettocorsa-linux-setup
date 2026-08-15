@@ -151,12 +151,11 @@ if [[ -e "temp/" ]]; then
 fi
 
 # Getting steam installation path
-NATIVE_STEAM_DIR="$HOME/.local/share/Steam"
-if [[ ! -d "$NATIVE_STEAM_DIR" ]]; then
-  out="$(readlink "$HOME/.steam/root")"
-  status="$?"
-  if [[ "$status" == "0" ]]; then
-    NATIVE_STEAM_DIR="$out"
+NATIVE_STEAM_DIR=""
+if [[ -e "$HOME/.steam/root" ]]; then
+  resolved="$(realpath "$HOME/.steam/root")"
+  if [[ -d "$resolved/steamapps" ]]; then
+    NATIVE_STEAM_DIR="$resolved"
   fi
 fi
 FLATPAK_STEAM_DIR="$HOME/.var/app/com.valvesoftware.Steam/data/Steam"
