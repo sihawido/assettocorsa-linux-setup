@@ -507,7 +507,10 @@ function install-dxvk {
 }
 
 function check-generated-files {
-  if [ ! -d "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
+  if [[ ! -d "$AC_COMPATDATA/pfx" ||
+        ! -d "$AC_COMPATDATA/pfx/drive_c" ||
+        ! -f "$AC_COMPATDATA/pfx/system.reg" ||
+        ! -f "$AC_COMPATDATA/pfx/user.reg" ]]; then
     echo "\
 ${bold}Before proceeding, please do the following to generate the wineprefix:
  1. Launch Assetto Corsa with Proton-GE $GE_version
@@ -519,7 +522,6 @@ Then start the script again, and skip the step relating to deleting the winepref
     return 1
   fi
 }
-
 OPTIONAL_STEPS=(
   check-start-menu-shortcut
   check-proton
