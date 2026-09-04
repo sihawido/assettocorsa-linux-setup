@@ -106,6 +106,7 @@ function check-deps {
   local supported_slackware=("slackware" "salix")
   local supported_gentoo=("gentoo")
   local supported_void=("void")
+  local supported_crux=("crux")
   # Getting info about user's distro
   local distro_id="$(get-os-release-var ID)"
   local distro_name="$(get-os-release-var NAME)"
@@ -137,6 +138,8 @@ function check-deps {
   elif [[ ${supported_void[*]} =~ "$distro_id" ]]; then
     deps=("wget" "tar" "unzip" "glib" "protontricks")
     pm_install="xbps-install -S"
+  elif [[ ${supported_crux[*]} =~ "$distro_id" ]]; then
+    pm_install="prt-get depinst"
   else
     echo "\
 $NAME is not currently supported.
