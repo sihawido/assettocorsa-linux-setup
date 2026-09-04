@@ -59,12 +59,12 @@ $output
 
 ${warning}If this is an issue, please report it on Github.${reset}
 "
-    exit 1
+    exit "$status"
   fi
 }
 
 # Returns the executable for given string, supports aliases.
-function get-exec {
+function getbin {
   local cmd="$1"
   if ! declare -p BASH_ALIASES > /dev/null; then
     declare -A BASH_ALIASES=()
@@ -90,71 +90,76 @@ function is-set {
   return 0
 }
 
-# Required packages
-required_packages=("wget" "tar" "unzip" "glib2" "protontricks")
+function get-os-release-var {
+  local name="$1"
+  run bash -c "source /etc/os-release; echo \"\$$name\""
+}
 
-# Supported distros
-supported_debian=("debian" "ubuntu" "linuxmint" "pop" "zorin" "neon")
-supported_fedora=("fedora" "nobara" "ultramarine")
-supported_arch=("arch" "endeavouros" "steamos" "cachyos" "artix")
-supported_opensuse=("opensuse-tumbleweed")
-supported_slackware=("slackware" "salix")
-supported_gentoo=("gentoo")
-supported_void=("void")
-
-# Checking distro compatability
-source "/etc/os-release"
-run is-set "ID"
-run is-set "NAME"
-if ! is-set "ID_LIKE"; then
-  ID_LIKE="undefined"
-fi
-if [[ ${supported_fedora[*]} =~ "$ID" ]] || [[ ${supported_fedora[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="dnf install"
-elif [[ ${supported_debian[*]} =~ "$ID" ]] || [[ ${supported_debian[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="apt install"
-elif [[ ${supported_arch[*]} =~ "$ID" ]] || [[ ${supported_arch[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="pacman -S"
-elif [[ ${supported_opensuse[*]} =~ "$ID" ]] || [[ ${supported_opensuse[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="zypper install"
-elif [[ ${supported_slackware[*]} =~ "$ID" ]] || [[ ${supported_slackware[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="slackpkg install or sboinstall"
-  required_packages=("wget" "tar" "infozip" "glib2" "protontricks")
-elif [[ ${supported_gentoo[*]} =~ "$ID" ]] || [[ ${supported_gentoo[*]} =~ "$ID_LIKE" ]]; then
-  pm_install="emerge"
-  required_packages=(
-    "net-misc/wget"
-    "app-arch/tar"
-    "app-arch/unzip"
-    "dev-libs/glib2"
-    "app-emulation/protontricks"
-  )
-elif [[ ${supported_void[*]} =~ "$ID" ]] || [[ ${supported_void[*]} =~ "$ID_LIKE" ]]; then
-  required_packages=("wget" "tar" "unzip" "glib" "protontricks")
-  pm_install="xbps-install -S"
-else
-  echo "\
-$NAME is not currently supported.
-You can open an issue on $(hyperlink "Github" "$REPO_LINK/issues") with \
-your system details to add it as supported."
-  exit 1
-fi
-
-# Checking if required packages are installed
-for package in "${required_packages[@]}"; do
-  bin="$(basename "$package")"
-  if [[ "$bin" == "glib2" ]] || [[ "$bin" == "glib" ]]; then
-    bin="gio"
-  elif [[ "$bin" == "infozip" ]]; then
-    bin="unzip"
+function check-deps {
+  # Defining dependencies
+  local deps=("wget" "tar" "unzip" "glib2" "winetricks" "protontricks")
+  # Defining supported distros
+  local supported_debian=("debian" "ubuntu" "linuxmint" "pop" "zorin" "neon")
+  local supported_fedora=("fedora" "nobara" "ultramarine")
+  local supported_arch=("arch" "endeavouros" "steamos" "cachyos" "artix")
+  local supported_opensuse=("opensuse-tumbleweed")
+  local supported_slackware=("slackware" "salix")
+  local supported_gentoo=("gentoo")
+  local supported_void=("void")
+  # Getting info about user's distro
+  local distro_id="$(get-os-release-var ID)"
+  local distro_name="$(get-os-release-var NAME)"
+  local distro_id_like="$(get-os-release-var ID_LIKE)"
+  if [[ "$distro_id_like" != "" ]]; then
+    distro_id="$distro_id_like"
   fi
-  if ! get-exec "$bin" > /dev/null; then
-    install_command="sudo $pm_install $package$"
-    install_command="${bold}${install_command}${reset}"
-    echo "$bin is not installed, run $install_command to install."
+  # Matching user's distro to supported distros
+  if [[ ${supported_fedora[*]} =~ "$distro_id" ]]; then
+    pm_install="dnf install"
+  elif [[ ${supported_debian[*]} =~ "$distro_id" ]]; then
+    pm_install="apt install"
+  elif [[ ${supported_arch[*]} =~ "$distro_id" ]]; then
+    pm_install="pacman -S"
+  elif [[ ${supported_opensuse[*]} =~ "$distro_id" ]]; then
+    pm_install="zypper install"
+  elif [[ ${supported_slackware[*]} =~ "$distro_id" ]]; then
+    pm_install="slackpkg install or sboinstall"
+    deps=("wget" "tar" "infozip" "glib2" "protontricks")
+  elif [[ ${supported_gentoo[*]} =~ "$distro_id" ]]; then
+    pm_install="emerge"
+    deps=(
+      "net-misc/wget"
+      "app-arch/tar"
+      "app-arch/unzip"
+      "dev-libs/glib2"
+      "app-emulation/protontricks"
+    )
+  elif [[ ${supported_void[*]} =~ "$distro_id" ]]; then
+    deps=("wget" "tar" "unzip" "glib" "protontricks")
+    pm_install="xbps-install -S"
+  else
+    echo "\
+$NAME is not currently supported.
+You can open an issue on $(hyperlink "Github" "$REPO_LINK/issues") \
+with your system details to add it as supported."
     exit 1
   fi
-done
+  # Checking if dependencies are installed
+  for package in "${deps[@]}"; do
+    bin="$(basename "$package")"
+    if [[ "$bin" == "glib2" ]] || [[ "$bin" == "glib" ]]; then
+      bin="gio"
+    elif [[ "$bin" == "infozip" ]]; then
+      bin="unzip"
+    fi
+    if ! getbin "$bin" > /dev/null; then
+      install_command="${bold}sudo $pm_install $package${reset}"
+      echo "$bin is not installed, run $install_command to install."
+      exit 1
+    fi
+  done
+}
+check-deps
 
 # Checking temp dir
 if [[ -e "temp/" ]]; then
