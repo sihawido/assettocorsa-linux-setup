@@ -159,23 +159,35 @@ if [[ ! -d "$NATIVE_STEAM_DIR" ]]; then
     NATIVE_STEAM_DIR="$out"
   fi
 fi
+
 FLATPAK_STEAM_DIR="$HOME/.var/app/com.valvesoftware.Steam/data/Steam"
+
+# Support for Snap installation of Steam
+# User data in snap is generally in 'common', but we check the requested 'current' symlink as well
+SNAP_STEAM_DIR="$HOME/snap/steam/common/.local/share/Steam"
+if [[ ! -d "$SNAP_STEAM_DIR" ]] && [[ -d "$HOME/snap/steam/current/.local/share/Steam" ]]; then
+  SNAP_STEAM_DIR="$HOME/snap/steam/current/.local/share/Steam"
+fi
+
 STEAM_INSTALL="?"
-if [[ -d "$NATIVE_STEAM_DIR" ]] && [[ -d "$FLATPAK_STEAM_DIR" ]]; then
-  echo "Steam is installed both as a native package and Flatpak."
+AVAILABLE_INSTALLS=()
+
+[[ -d "$NATIVE_STEAM_DIR" ]] && AVAILABLE_INSTALLS+=("Native")
+[[ -d "$FLATPAK_STEAM_DIR" ]] && AVAILABLE_INSTALLS+=("Flatpak")
+[[ -d "$SNAP_STEAM_DIR" ]] && AVAILABLE_INSTALLS+=("Snap")
+
+if [[ ${#AVAILABLE_INSTALLS[@]} -gt 1 ]]; then
+  echo "Multiple Steam installations found."
   PS3="Select which installation of Steam to use: "
-  select installation_method in "Native" "Flatpak"; do
+  select installation_method in "${AVAILABLE_INSTALLS[@]}"; do
     # Converting to lowercase and getting the first word
     installation_method="$(echo ${installation_method,,} | awk '{print $1;}')"
     STEAM_INSTALL="$installation_method"
     break
   done
-elif [[ -d "$NATIVE_STEAM_DIR" ]]; then
-  echo "Native installation of Steam found."
-  STEAM_INSTALL="native"
-elif [[ -d "$FLATPAK_STEAM_DIR" ]]; then
-  echo "Flatpak installation of Steam found."
-  STEAM_INSTALL="flatpak"
+elif [[ ${#AVAILABLE_INSTALLS[@]} -eq 1 ]]; then
+  echo "${AVAILABLE_INSTALLS[0]} installation of Steam found."
+  STEAM_INSTALL="$(echo ${AVAILABLE_INSTALLS[0],,} | awk '{print $1;}')"
 else
   echo "Steam installation not found."
   exit 1
@@ -187,6 +199,9 @@ if [[ "$STEAM_INSTALL" == "native" ]]; then
 elif [[ "$STEAM_INSTALL" == "flatpak" ]]; then
   STEAM_DIR="$FLATPAK_STEAM_DIR"
   APPLAUNCH_AC="flatpak run com.valvesoftware.Steam -applaunch 244210 %u"
+elif [[ "$STEAM_INSTALL" == "snap" ]]; then
+  STEAM_DIR="$SNAP_STEAM_DIR"
+  APPLAUNCH_AC="snap run steam -applaunch 244210 %u"
 else
   echo "Invalid STEAM_INSTALL '$STEAM_INSTALL'"
   exit 1
@@ -475,6 +490,8 @@ function install-csp {
   subprocess rm -rf "temp/"
   # Installing fonts for CSP
   echo "Installing fonts required for CSP... (this might take a while)"
+  # Add the STEAM_DIR environment variable to the protontricks command so that it can find the Steam installation path.
+  export STEAM_DIR="$STEAM_DIR"
   subprocess protontricks 244210 corefonts
 }
 
