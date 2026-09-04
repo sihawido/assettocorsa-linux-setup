@@ -287,6 +287,7 @@ AC_COMPATDATA="$STEAMAPPS/compatdata/244210"
 # Checking for potential disk issues
 function check-disk {
   local dev_path="$(findmnt -no SOURCE --target "$AC_COMPATDATA")"
+  dev_path="${dev_path%\[/home\]}"
   local filesystem_type="$(lsblk -no fstype "$dev_path")"
   if [[ "$filesystem_type" == "ntfs" ]]; then
     echo "${warning}Assetto Corsa is installed on a NTFS partition. This will cause issues.${reset}"
