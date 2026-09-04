@@ -176,12 +176,11 @@ if [[ -e "temp/" ]]; then
 fi
 
 # Getting steam installation path
-NATIVE_STEAM_DIR="$HOME/.local/share/Steam"
-if [[ ! -d "$NATIVE_STEAM_DIR" ]]; then
-  out="$(readlink "$HOME/.steam/root")"
-  status="$?"
-  if [[ "$status" == "0" ]]; then
-    NATIVE_STEAM_DIR="$out"
+NATIVE_STEAM_DIR=""
+if [[ -e "$HOME/.steam/root" ]]; then
+  resolved="$(realpath "$HOME/.steam/root")"
+  if [[ -d "$resolved/steamapps" ]]; then
+    NATIVE_STEAM_DIR="$resolved"
   fi
 fi
 
@@ -562,7 +561,10 @@ function install-dxvk {
 }
 
 function check-generated-files {
-  if [ ! -d "$AC_COMPATDATA/pfx/drive_c/Program Files (x86)/Steam/config" ]; then
+  if [[ ! -d "$AC_COMPATDATA/pfx" ||
+        ! -d "$AC_COMPATDATA/pfx/drive_c" ||
+        ! -f "$AC_COMPATDATA/pfx/system.reg" ||
+        ! -f "$AC_COMPATDATA/pfx/user.reg" ]]; then
     echo "\
 ${bold}Before proceeding, please do the following to generate the wineprefix:
  1. Launch Assetto Corsa with Proton-GE $GE_VERSION
@@ -574,7 +576,6 @@ Then start the script again, and skip the step relating to deleting the winepref
     return 1
   fi
 }
-
 OPTIONAL_STEPS=(
   check-start-menu-shortcut
   check-proton
